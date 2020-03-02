@@ -16,7 +16,7 @@ cargo build --release
 
 ## run
 
-Warden uses `netcat` to communicate with Zookeeper nodes, so it requires `nc` to be available in terminal.
+Warden uses `netcat` to communicate with Zookeeper nodes, so it requires `nc` to be available in the terminal.
 
 To run it you need to pass a list of addresses for Zookeeper nodes like this:
 ```
