@@ -6,6 +6,12 @@ use std::str;
 use std::sync::mpsc;
 use std::thread;
 
+// Represents a mode that the node is in. Theoretically there are only to modes: leader and follower. 
+// But since we only get a string from the server we can't really be sure if there's no error, 
+// or some new mode has been introduced - that's why Unknown exists.
+//
+// On the other hand a Leader is a special node that returns some specific information. 
+// That's why we need to able to distinguish between them in the first place.
 #[derive(Clone, Copy, Debug)]
 enum Mode {
   Leader,
@@ -24,6 +30,7 @@ struct ZNode {
     mode: Mode,
 }
 
+/// Splits a String of format `host:port` into a tuple.
 fn split(s: &String) -> (String, String) {
     let pair_vec: Vec<String> = s.split(':').map(|s| s.to_string()).collect();
     
@@ -34,6 +41,7 @@ fn split(s: &String) -> (String, String) {
     }
 }
 
+/// Returns length of the longest String in this Vector.
 fn max_len(v: &Vec<&String>) -> usize {
     let max_host = v.iter().fold(v[0], |acc, &t| {
         if t.len() > acc.len() {
@@ -46,6 +54,7 @@ fn max_len(v: &Vec<&String>) -> usize {
     return max_host.len();
 }
 
+//TODO refactor into a service
 fn call_zookeeper(host: &String, port: &String, command: &String, grep: &String) -> Option<String> {
     let com = format!("echo -n '{}' | nc -w 5 {} {} | grep {}", command, host, port, grep);
 
