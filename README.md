@@ -1,5 +1,7 @@
 # warden
 
+Simple command line tool to view and monitor Zookeeper/Kafka cluster status.
+
 ## build
 
 for debug
