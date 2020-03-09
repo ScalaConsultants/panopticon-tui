@@ -5,6 +5,7 @@ use std::process::Command;
 use std::str;
 use std::sync::mpsc;
 use std::thread;
+use crossterm::style::{style, Color, Attribute};
 
 // Represents a mode that the node is in. Theoretically there are only to modes: leader and follower. 
 // But since we only get a string from the server we can't really be sure if there's no error, 
@@ -14,15 +15,20 @@ use std::thread;
 // That's why we need to able to distinguish between them in the first place.
 #[derive(Clone, Copy, Debug)]
 enum Mode {
-  Leader,
-  Follower,
-  Unknown,
+    Follower,
+    Leader,
+    Standalone,
+    Unknown,
 }
 
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+struct KafkaCluster {
+    ids: Vec<String>,
 }
 
 struct ZNode {
@@ -57,15 +63,21 @@ impl ZookeeperClient {
     
         if output_status.success() {
             let mut output_std: Vec<u8> = output.stdout.clone();
-            output_std.truncate(output_std.len() - 1);
+            output_std.truncate(output_std.len() - 1); //remove trailing whitespace
             let pref_len = grep.len();
             let output_std_f: Vec<u8> = output_std.drain(pref_len+1..).collect();
             let output_str = str::from_utf8(&output_std_f).unwrap();
+            let output_str_f = ZookeeperClient::remove_first(output_str).unwrap_or("");
+
             
             return Some(output_str.trim().to_string());
         } else {
             return None;
         }
+    }
+
+    fn remove_first(s: &str) -> Option<&str> {
+        s.chars().next().map(|c| &s[c.len_utf8()..])
     }
 
     fn get_status(&self) -> Option<ZNode> {
@@ -75,8 +87,9 @@ impl ZookeeperClient {
         let znode: Option<ZNode> = match (mode, server_id) {
             (Some(m), Some(id)) => {
                 let mode = match m.as_str() {
-                    "leader"   => Mode::Leader,
-                    "follower" => Mode::Follower,
+                    "follower"   => Mode::Follower,
+                    "leader"     => Mode::Leader,
+                    "standalone" => Mode::Standalone,
                     _ => Mode::Unknown,
                 };
 
@@ -91,6 +104,26 @@ impl ZookeeperClient {
         };
 
         znode
+    }
+
+    fn get_brokers(&self) -> Option<KafkaCluster> {
+        let brokers = self.call_nc(&"wchc".to_string(), &"/brokers/ids".to_string());
+        brokers.map(|ls| KafkaCluster {
+            ids: ls.lines().map(|x| x.to_string()).collect()
+        })
+    }
+}
+
+struct ZkEnsembleService {
+    nodes: Vec<(String, String)>
+}
+
+impl ZkEnsembleService {
+    
+    fn new(nodes: Vec<(String, String)>) -> ZkEnsembleService {
+        ZkEnsembleService {
+            nodes: nodes,
+        }
     }
 }
 
@@ -167,7 +200,19 @@ fn main() {
     for h in hosts {
         let znode = status.get(h.as_str()).unwrap();
         let (id, mode) = znode.as_ref().map_or_else(|| ("_".to_string(), "no connection".to_string()), |zn| (zn.id.clone(), zn.mode.to_string()));
-        println!("{}", format!("{}: {:width$} : {}", id, h, mode, width = max_host_len));
+        let color = znode.as_ref().map_or_else(|| Color::Blue, |zn| match zn.mode {
+            Mode::Follower => Color::Cyan,
+            Mode::Leader   => Color::Magenta,
+            Mode::Standalone => Color::Yellow,
+            Mode::Unknown  => Color::Red,
+        });
+        let styled_id = style(id)
+            .with(Color::Yellow)
+            .attribute(Attribute::Bold);
+        let styled_mode = style(mode)
+            .with(color)
+            .attribute(Attribute::Bold);
+        println!("{}", format!("{}: {:width$} : {}", styled_id, h, styled_mode, width = max_host_len));
     }
 
 }
