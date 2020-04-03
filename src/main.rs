@@ -29,6 +29,7 @@ impl fmt::Display for Mode {
 
 struct KafkaCluster {
     ids: Vec<String>,
+    topics: Vec<String>,
 }
 
 struct ZNode {
@@ -50,8 +51,8 @@ impl ZookeeperClient {
         }
     }
 
-    fn call_nc(&self, command: &String, grep: &String) -> Option<String> {
-        let com = format!("echo -n '{}' | nc -w 5 {} {} | grep {}", command, self.host, self.port, grep);
+    fn call_nc(&self, command: &String, grep: &String) -> Vec<String> {
+        let com = format!("echo -n '{}' | nc -w 3 {} {} | grep {}", command, self.host, self.port, grep);
     
         let output = Command::new("sh")
             .arg("-c")
@@ -63,16 +64,16 @@ impl ZookeeperClient {
     
         if output_status.success() {
             let mut output_std: Vec<u8> = output.stdout.clone();
-            output_std.truncate(output_std.len() - 1); //remove trailing whitespace
             let pref_len = grep.len();
-            let output_std_f: Vec<u8> = output_std.drain(pref_len+1..).collect();
-            let output_str = str::from_utf8(&output_std_f).unwrap();
-            let output_str_f = ZookeeperClient::remove_first(output_str).unwrap_or("");
 
+            let output_str = str::from_utf8(&output_std).unwrap();
+            let output_str_lines = output_str.lines().map(|x| ZookeeperClient::remove_n(x.trim(), pref_len+1));
             
-            return Some(output_str.trim().to_string());
+            let a = output_str_lines.filter(|x| x.is_some()).map(|x| x.unwrap().trim().to_string()).collect();
+            println!("{:?}", a);
+            return a;
         } else {
-            return None;
+            return vec![];
         }
     }
 
@@ -80,12 +81,27 @@ impl ZookeeperClient {
         s.chars().next().map(|c| &s[c.len_utf8()..])
     }
 
+    fn remove_n(s: &str, n: usize) -> Option<String> {
+        match s.char_indices().nth(n) {
+            Some((n, _)) => {
+                let a = s.to_string().drain(n..).collect::<String>();
+                Some(a)
+            },
+            None         => None
+        }
+    }
+
     fn get_status(&self) -> Option<ZNode> {
-        let mode = self.call_nc(&"srvr".to_string(), &"Mode".to_string());
-        let server_id = self.call_nc(&"conf".to_string(), &"serverId".to_string());
+        println!("get_status");
+        let mut modes = self.call_nc(&"srvr".to_string(), &"Mode".to_string());
+        let mut server_ids = self.call_nc(&"conf".to_string(), &"serverId".to_string());
+
+        let mode = modes.pop();
+        let server_id = server_ids.pop();
 
         let znode: Option<ZNode> = match (mode, server_id) {
             (Some(m), Some(id)) => {
+                println!("{}", m);
                 let mode = match m.as_str() {
                     "follower"   => Mode::Follower,
                     "leader"     => Mode::Leader,
@@ -108,10 +124,13 @@ impl ZookeeperClient {
 
     fn get_brokers(&self) -> Option<KafkaCluster> {
         let brokers = self.call_nc(&"wchc".to_string(), &"/brokers/ids".to_string());
-        brokers.map(|ls| KafkaCluster {
-            ids: ls.lines().map(|x| x.to_string()).collect()
+        let topics = self.call_nc(&"wchc".to_string(), &"/brokers/topics".to_string());
+        Some(KafkaCluster {
+            ids: brokers,
+            topics: topics,
         })
     }
+
 }
 
 struct ZkEnsembleService {
@@ -157,7 +176,8 @@ fn main() {
     let args: Vec<String> = env::args().collect::<Vec<String>>().drain(1..).collect(); //drop the first arg
     let args_iter = args.iter();
     let args_split: Vec<(String, String)> = args_iter.map(|arg| split(&arg.to_string())).collect();
-    let hosts: Vec<&String> = args_split.iter().map(|arg| &arg.0).collect();
+    //let hosts: Vec<&String> = args_split.iter().map(|arg| &arg.0)).collect();
+    let hosts: Vec<&String> = args.iter().map(|arg| arg).collect();
     let max_host_len = max_len(&hosts);
 
     let hosts_size: usize = hosts.len();
@@ -167,6 +187,7 @@ fn main() {
     let mut threads = vec![];
 
     let mut status = HashMap::new();
+    let mut cluster = None;
 
     for (host, port) in &args_split {
 
@@ -176,17 +197,40 @@ fn main() {
         let p = port.clone();
 
         threads.push(thread::spawn(move || {
+            let p2 = p.clone();
             let client = ZookeeperClient::new(h.clone(), p);
             let znode = client.get_status();
-            txc.send((h, znode));
+            let mode = znode.as_ref().map(|zn| zn.mode);
+            if let Some(m) = mode {
+                match m {
+                    Mode::Leader => {
+                        let c = client.get_brokers();
+                        //println!("{:?}", c.map(|cl| cl.ids.clone()));
+                        txc.send((format!("{}:{}", h, p2), znode, c));
+                    },
+                    _ => {
+                        txc.send((format!("{}:{}", h, p2), znode, None));
+                    },
+                }
+            } else {
+                txc.send((format!("{}:{}", h, p2), znode, None));
+            }
         }));
 
     }
 
-    for (h, znode) in rx {        
+    for (h, znode, cl) in rx {        
         status.insert(h, znode);
+        println!("{:?}", cl.is_some());
+        if let Some(c) = cl {
+            println!("{}", "inside");
+            println!("{:?}", &c.ids);
+            cluster = Some(c);
+        }
 
         let i = status.len();
+        println!("len {}", i);
+        println!("{}", hosts_size);
         if  i == hosts_size {
             break;
         }
@@ -215,4 +259,11 @@ fn main() {
         println!("{}", format!("{}: {:width$} : {}", styled_id, h, styled_mode, width = max_host_len));
     }
 
+    let (ids, topics) = cluster.map(|c| (c.ids, c.topics)).unwrap_or((vec!(), vec!()));
+    
+    println!("\nKafka brokers:");
+    println!("{}", format!("{:?}", ids));
+
+    println!("\nKafka topics:");
+    println!("{}", format!("{:?}", topics));
 }
