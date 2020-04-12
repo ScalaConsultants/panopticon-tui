@@ -1,150 +1,31 @@
+
+mod app;
+mod ui;
+mod zio;
+mod zookeeper;
+
 use std::collections::HashMap;
 use std::env;
-use std::fmt;
-use std::process::Command;
-use std::str;
+use std::error::Error;
 use std::sync::mpsc;
-use std::thread;
-use crossterm::style::{style, Color, Attribute};
 
-// Represents a mode that the node is in. Theoretically there are only to modes: leader and follower. 
-// But since we only get a string from the server we can't really be sure if there's no error, 
-// or some new mode has been introduced - that's why Unknown exists.
-//
-// On the other hand a Leader is a special node that returns some specific information. 
-// That's why we need to able to distinguish between them in the first place.
-#[derive(Clone, Copy, Debug)]
-enum Mode {
-    Follower,
-    Leader,
-    Standalone,
-    Unknown,
-}
+use crossterm::{
+    input::{input, InputEvent, KeyEvent},
+    screen::AlternateScreen,
+};
+use std::{
+    io::stdout,
+    thread,
+    time::Duration,
+};
+use tui::{
+    backend::CrosstermBackend, 
+    Terminal,
+};
 
-impl fmt::Display for Mode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-struct KafkaCluster {
-    ids: Vec<String>,
-    topics: Vec<String>,
-}
-
-struct ZNode {
-    id: String,
-    mode: Mode,
-}
-
-struct ZookeeperClient {
-    host: String,
-    port: String,
-}
-
-impl ZookeeperClient {
-
-    fn new(host: String, port: String) -> ZookeeperClient {
-        ZookeeperClient {
-            host: host,
-            port: port,
-        }
-    }
-
-    fn call_nc(&self, command: &String, grep: &String) -> Vec<String> {
-        let com = format!("echo -n '{}' | nc -w 3 {} {} | grep {}", command, self.host, self.port, grep);
-    
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(com)
-            .output()
-            .expect("no connection");
-    
-        let output_status = output.status;
-    
-        if output_status.success() {
-            let mut output_std: Vec<u8> = output.stdout.clone();
-            let pref_len = grep.len();
-
-            let output_str = str::from_utf8(&output_std).unwrap();
-            let output_str_lines = output_str.lines().map(|x| ZookeeperClient::remove_n(x.trim(), pref_len+1));
-            
-            let a = output_str_lines.filter(|x| x.is_some()).map(|x| x.unwrap().trim().to_string()).collect();
-            println!("{:?}", a);
-            return a;
-        } else {
-            return vec![];
-        }
-    }
-
-    fn remove_first(s: &str) -> Option<&str> {
-        s.chars().next().map(|c| &s[c.len_utf8()..])
-    }
-
-    fn remove_n(s: &str, n: usize) -> Option<String> {
-        match s.char_indices().nth(n) {
-            Some((n, _)) => {
-                let a = s.to_string().drain(n..).collect::<String>();
-                Some(a)
-            },
-            None         => None
-        }
-    }
-
-    fn get_status(&self) -> Option<ZNode> {
-        println!("get_status");
-        let mut modes = self.call_nc(&"srvr".to_string(), &"Mode".to_string());
-        let mut server_ids = self.call_nc(&"conf".to_string(), &"serverId".to_string());
-
-        let mode = modes.pop();
-        let server_id = server_ids.pop();
-
-        let znode: Option<ZNode> = match (mode, server_id) {
-            (Some(m), Some(id)) => {
-                println!("{}", m);
-                let mode = match m.as_str() {
-                    "follower"   => Mode::Follower,
-                    "leader"     => Mode::Leader,
-                    "standalone" => Mode::Standalone,
-                    _ => Mode::Unknown,
-                };
-
-                let znode = ZNode {
-                    id: id,
-                    mode: mode
-                };
-
-                Some(znode)
-            },
-            _ => None
-        };
-
-        znode
-    }
-
-    fn get_brokers(&self) -> Option<KafkaCluster> {
-        let brokers = self.call_nc(&"wchc".to_string(), &"/brokers/ids".to_string());
-        let topics = self.call_nc(&"wchc".to_string(), &"/brokers/topics".to_string());
-        Some(KafkaCluster {
-            ids: brokers,
-            topics: topics,
-        })
-    }
-
-}
-
-struct ZkEnsembleService {
-    nodes: Vec<(String, String)>
-}
-
-impl ZkEnsembleService {
-    
-    fn new(nodes: Vec<(String, String)>) -> ZkEnsembleService {
-        ZkEnsembleService {
-            nodes: nodes,
-        }
-    }
-}
+use app::App;
+use zio::model::Fiber;
+use zookeeper::model::{Mode, ZAddr};
 
 /// Splits a String of format `host:port` into a tuple.
 fn split(s: &String) -> (String, String) {
@@ -170,14 +51,41 @@ fn max_len(v: &Vec<&String>) -> usize {
     return max_host.len();
 }
 
-fn main() {
-    println!("Zookeeper ensemble status:");
+enum Event<I> {
+    Input(I),
+    Tick,
+}
 
-    let args: Vec<String> = env::args().collect::<Vec<String>>().drain(1..).collect(); //drop the first arg
-    let args_iter = args.iter();
-    let args_split: Vec<(String, String)> = args_iter.map(|arg| split(&arg.to_string())).collect();
-    //let hosts: Vec<&String> = args_split.iter().map(|arg| &arg.0)).collect();
-    let hosts: Vec<&String> = args.iter().map(|arg| arg).collect();
+struct FiberDump {
+    pub ids: Vec<Fiber>,
+    pub dumps: Vec<String>,
+}
+
+struct ZookeeperStatus {
+    nodes: Vec<String>,
+    wchc_all: Vec<Vec<String>>,
+}
+
+fn get_fiber_dump() -> Result<FiberDump, Box<dyn Error>> {
+    zio::zmx_client::get_dump().map(|a| {
+        let mut fiber_ids: Vec<Fiber> = vec![];
+        let mut fiber_dumps: Vec<String> = vec![];
+        for (id, dump) in a {
+            fiber_ids.push(id);
+            fiber_dumps.push(dump);
+        }
+    
+        FiberDump {
+            ids: fiber_ids,
+            dumps: fiber_dumps,
+        }
+    })
+}
+
+fn get_zookeeper_status(hosts: Vec<&String>) -> ZookeeperStatus {
+
+    let hosts_and_ports: Vec<(String, String)> = hosts.iter().map(|arg| split(&arg.to_string())).collect();
+
     let max_host_len = max_len(&hosts);
 
     let hosts_size: usize = hosts.len();
@@ -186,10 +94,10 @@ fn main() {
 
     let mut threads = vec![];
 
-    let mut status = HashMap::new();
-    let mut cluster = None;
+    let mut znode_status = HashMap::new();
+    let mut znode_wchc   = HashMap::new();
 
-    for (host, port) in &args_split {
+    for (host, port) in &hosts_and_ports {
 
         let txc = mpsc::Sender::clone(&tx);
 
@@ -198,39 +106,32 @@ fn main() {
 
         threads.push(thread::spawn(move || {
             let p2 = p.clone();
-            let client = ZookeeperClient::new(h.clone(), p);
-            let znode = client.get_status();
+            //let client = ZookeeperClient::new(h.clone(), p);
+            let znode = zookeeper::zookeeper_client::get_status(ZAddr { host: h.clone(), port: p.clone() });
             let mode = znode.as_ref().map(|zn| zn.mode);
             if let Some(m) = mode {
                 match m {
-                    Mode::Leader => {
-                        let c = client.get_brokers();
+                    Mode::Leader | Mode::Follower | Mode::Standalone => {
+                        let c = zookeeper::zookeeper_client::get_wchc(ZAddr { host: h.clone(), port: p.clone() });
                         //println!("{:?}", c.map(|cl| cl.ids.clone()));
-                        txc.send((format!("{}:{}", h, p2), znode, c));
+                        let _ = txc.send((format!("{}:{}", h, p2), znode, c));
                     },
                     _ => {
-                        txc.send((format!("{}:{}", h, p2), znode, None));
+                        let _ = txc.send((format!("{}:{}", h, p2), znode, vec![]));
                     },
                 }
             } else {
-                txc.send((format!("{}:{}", h, p2), znode, None));
+                let _ = txc.send((format!("{}:{}", h, p2), znode, vec![]));
             }
         }));
 
     }
 
     for (h, znode, cl) in rx {        
-        status.insert(h, znode);
-        println!("{:?}", cl.is_some());
-        if let Some(c) = cl {
-            println!("{}", "inside");
-            println!("{:?}", &c.ids);
-            cluster = Some(c);
-        }
+        znode_status.insert(h.clone(), znode);
+        znode_wchc.insert(h, cl);
 
-        let i = status.len();
-        println!("len {}", i);
-        println!("{}", hosts_size);
+        let i = znode_status.len();
         if  i == hosts_size {
             break;
         }
@@ -240,30 +141,105 @@ fn main() {
         let _ = thread.join();
     }
 
+    let mut zookeeper_nodes: Vec<String> = vec![];
+    let mut zookeeper_wchc_all: Vec<Vec<String>> = vec![];
     //keep the hosts ordering from the original parameter list
     for h in hosts {
-        let znode = status.get(h.as_str()).unwrap();
+        let znode = znode_status.get(h.as_str()).unwrap();
+        let zwchc = znode_wchc.get(h.as_str()).unwrap();
+        println!("{:?}", &zwchc);
         let (id, mode) = znode.as_ref().map_or_else(|| ("_".to_string(), "no connection".to_string()), |zn| (zn.id.clone(), zn.mode.to_string()));
-        let color = znode.as_ref().map_or_else(|| Color::Blue, |zn| match zn.mode {
-            Mode::Follower => Color::Cyan,
-            Mode::Leader   => Color::Magenta,
-            Mode::Standalone => Color::Yellow,
-            Mode::Unknown  => Color::Red,
-        });
-        let styled_id = style(id)
-            .with(Color::Yellow)
-            .attribute(Attribute::Bold);
-        let styled_mode = style(mode)
-            .with(color)
-            .attribute(Attribute::Bold);
-        println!("{}", format!("{}: {:width$} : {}", styled_id, h, styled_mode, width = max_host_len));
+        let s: String = format!("{}: {:width$} : {}", id, h, mode, width = max_host_len);
+        zookeeper_nodes.push(s.clone());
+        zookeeper_wchc_all.push(zwchc.to_vec());
+        println!("aaa {:?}", &zookeeper_wchc_all);
+        println!("{}", s);
     }
 
-    let (ids, topics) = cluster.map(|c| (c.ids, c.topics)).unwrap_or((vec!(), vec!()));
-    
-    println!("\nKafka brokers:");
-    println!("{}", format!("{:?}", ids));
+    ZookeeperStatus {
+        nodes: zookeeper_nodes,
+        wchc_all: zookeeper_wchc_all,
+    }
+}
 
-    println!("\nKafka topics:");
-    println!("{}", format!("{:?}", topics));
+fn main() -> Result<(), failure::Error> {
+    let tick_rate: u64 = 2000;
+
+    let args: Vec<String> = env::args().collect::<Vec<String>>().drain(1..).collect(); //drop the first arg
+    let zk_hosts: Vec<&String> = args.iter().map(|arg| arg).collect();
+
+    let screen = AlternateScreen::to_alternate(true)?;
+    let backend = CrosstermBackend::with_alternate_screen(stdout(), screen)?;
+    let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+
+    // Setup input handling
+    let (tx, rx) = mpsc::channel();
+    {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let input = input();
+            let mut reader = input.read_sync();
+            loop {
+                match reader.next() {
+                    Some(InputEvent::Keyboard(key)) => {
+                        if let Err(_) = tx.send(Event::Input(key.clone())) {
+                            return;
+                        }
+                        if key == KeyEvent::Char('q') {
+                            return;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    thread::spawn(move || {
+        let tx = tx.clone();
+        loop {
+            tx.send(Event::Tick).unwrap();
+            thread::sleep(Duration::from_millis(tick_rate));
+        }
+    });
+
+    let fd = get_fiber_dump().unwrap();//TODO take care of error
+    let zs = get_zookeeper_status(zk_hosts);
+
+    let fd_fmt: Vec<String> = fd.ids.iter().map(|f| f.to_string()).collect();
+
+    let mut app = App::new(
+        "Panopticon", 
+        zs.nodes.iter().map(|z| z.as_str()).collect(), 
+        zs.wchc_all.iter().map(|v| v.iter().map(|z| z.as_str()).collect()).collect(),
+        fd_fmt.iter().map(|f| f.as_str()).collect(),
+        fd.dumps.iter().map(|z| z.as_str()).collect()
+    );
+
+    terminal.clear()?;
+
+    loop {
+        ui::draw(&mut terminal, &app)?;
+        match rx.recv()? {
+            Event::Input(event) => match event {
+                KeyEvent::Char(c) => app.on_key(c),
+                KeyEvent::Left => app.on_left(),
+                KeyEvent::Up => app.on_up(),
+                KeyEvent::Right => app.on_right(),
+                KeyEvent::Down => app.on_down(),
+                KeyEvent::PageUp => app.on_page_up(),
+                KeyEvent::PageDown => app.on_page_down(),
+                _ => {}
+            },
+            Event::Tick => {
+                app.on_tick();
+            }
+        }
+        if app.should_quit {
+            break;
+        }
+    }
+
+    Ok(())
 }
