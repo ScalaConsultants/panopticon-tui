@@ -1,6 +1,10 @@
-# warden
+# panopticon
 
-Simple command line tool to view and monitor Zookeeper/Kafka cluster status.
+Terminal UI diagnostic tool for your applications.
+
+Currently supports:
+- ZIO
+- Zookeeper
 
 ## build
 
@@ -16,9 +20,9 @@ cargo build --release
 
 ## run
 
-Warden uses `netcat` to communicate with Zookeeper nodes, so it requires `nc` to be available in the terminal.
+Panopticon uses `netcat` to communicate with Zookeeper nodes, so it requires `nc` to be available in the terminal.
 
 To run it you need to pass a list of addresses for Zookeeper nodes like this:
 ```
-./warden my_host_x.com:2181 my_host_y.com:2181 my_host_z.com:2181
+./panopticon my_host_x.com:2181 my_host_y.com:2181 my_host_z.com:2181
 ```
