@@ -83,17 +83,17 @@ fn print_nodes(nodes: Vec<Fiber>, level: usize, tree: &HashMap<Option<usize>, Ve
         vec![]
     } else {
         let fib = nodes.last().unwrap();
-        let parent: (String, Fiber) = (format!("{:width$}└#{}", indent.clone(), fib.id, width = level), fib.to_owned());
+        let parent: (String, Fiber) = (format!("{:width$}└─#{}", indent.clone(), fib.id, width = level), fib.to_owned());
         let mut last_node = tree.get(&Some(fib.id)).map(|v| 
-            print_nodes(v.to_vec(), level + 1, tree, format!("{} ", indent.clone()))
+            print_nodes(v.to_vec(), level + 1, tree, format!("{}  ", indent.clone()))
         ).unwrap_or_else(|| vec![]);
         last_node.insert(0, parent);
 
         if nodes.len() > 1 {
-            let new_indent = format!("{}│", indent.clone());
+            let new_indent = format!("{}│ ", indent.clone());
             let n = nodes.len() - 1;
             let mut all: Vec<(String, Fiber)> = nodes[..n].iter().fold(vec![], |mut acc, fib| {
-                let parent: (String, Fiber) = (format!("{:width$}├#{}", indent.clone(), fib.id, width = level), fib.to_owned());
+                let parent: (String, Fiber) = (format!("{:width$}├─#{}", indent.clone(), fib.id, width = level), fib.to_owned());
                 let mut nodes: Vec<(String, Fiber)> = tree.get(&Some(fib.id)).map(|v| 
                     print_nodes(v.to_vec(), level + 1, tree, new_indent.clone())
                 ).unwrap_or_else(|| vec![]);
