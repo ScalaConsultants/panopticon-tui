@@ -1,5 +1,9 @@
 use std::iter::Iterator;
 
+use crate::ui::formatter;
+use crate::ui::model::UIFiber;
+use crate::zio::zmx_client;
+
 pub struct TabsState<'a> {
     pub titles: Vec<&'a str>,
     pub index: usize,
@@ -51,9 +55,9 @@ pub struct App<'a> {
     pub zookeeper_wchc: Vec<&'a str>,
     pub zookeeper_wchc_all: Vec<Vec<&'a str>>,
     pub kafka_brokers: ListState<&'a str>,
-    pub fibers: ListState<&'a str>,
-    pub fiber_dump: &'a str,
-    pub fiber_dump_all: Vec<&'a str>,
+    pub fibers: ListState<String>,
+    pub fiber_dump: String,
+    pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
     pub barchart: Vec<(&'a str, u64)>,
     pub zio_keeper_nodes: ListState<&'a str>,
@@ -62,9 +66,9 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, zookeeper_nodes: Vec<&'a str>, zookeeper_wchc_all: Vec<Vec<&'a str>>, fibers: Vec<&'a str>, fiber_dump_all: Vec<&'a str>) -> App<'a> {
+    pub fn new(title: &'a str, zookeeper_nodes: Vec<&'a str>, zookeeper_wchc_all: Vec<Vec<&'a str>>, fibers: Vec<String>, fiber_dump_all: Vec<String>) -> App<'a> {
         let a: Vec<&'a str> = zookeeper_wchc_all[0].to_owned();
-        let b: &'a str = &fiber_dump_all[0];
+        //let b: &'a str = &fiber_dump_all[0];
         //let b: Vec<&str> = a.to_owned().iter().map(|z| z.as_str().clone()).collect::<Vec<&str>>().to_owned();
         App {
             title,
@@ -75,7 +79,7 @@ impl<'a> App<'a> {
             zookeeper_wchc_all: zookeeper_wchc_all,
             kafka_brokers: ListState::new(KAFKA_BROKERS.to_vec()),
             fibers: ListState::new(fibers),
-            fiber_dump: b,
+            fiber_dump: "".to_string(),
             fiber_dump_all: fiber_dump_all,
             scroll: 0,
             barchart: EVENTS.to_vec(),
@@ -93,7 +97,7 @@ impl<'a> App<'a> {
         } else if tab == 2 {
             self.fibers.select_previous();
             let n = self.fibers.selected;
-            self.fiber_dump = self.fiber_dump_all[n];
+            self.fiber_dump = self.fiber_dump_all[n].to_owned();
         }
     }
 
@@ -106,7 +110,7 @@ impl<'a> App<'a> {
         } else if tab == 2 {
             self.fibers.select_next();
             let n = self.fibers.selected;
-            self.fiber_dump = &self.fiber_dump_all[n];
+            self.fiber_dump = self.fiber_dump_all[n].to_owned();
         }
     }
 
@@ -116,6 +120,24 @@ impl<'a> App<'a> {
 
     pub fn on_left(&mut self) {
         self.tabs.previous();
+    }
+
+    pub fn on_enter(&mut self) {
+        let tab = self.tabs.index;
+        if tab == 2 {
+            let fd = zmx_client::get_dump().unwrap();//TODO take care of error
+            let list: Vec<UIFiber> = formatter::printable_tree(fd);
+            let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
+            let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
+
+            //let mut l: &Vec<&'a str> = &fib_labels.iter().map(|x| x.clone().to_owned().as_str()).collect();
+            self.fibers.items.clear();
+            self.fibers.items.append(&mut fib_labels);
+            self.fibers.selected = 0;
+            self.fiber_dump = fib_dumps[0].to_owned();
+            self.fiber_dump_all.clear();
+            self.fiber_dump_all.append(&mut fib_dumps);
+        }
     }
 
     pub fn on_key(&mut self, c: char) {

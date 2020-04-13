@@ -1,12 +1,10 @@
 
-mod app;
 mod ui;
 mod zio;
 mod zookeeper;
 
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
 use std::sync::mpsc;
 
 use crossterm::{
@@ -23,8 +21,7 @@ use tui::{
     Terminal,
 };
 
-use app::App;
-use zio::model::Fiber;
+use ui::app::App;
 use zookeeper::model::{Mode, ZAddr};
 
 /// Splits a String of format `host:port` into a tuple.
@@ -56,30 +53,9 @@ enum Event<I> {
     Tick,
 }
 
-struct FiberDump {
-    pub ids: Vec<Fiber>,
-    pub dumps: Vec<String>,
-}
-
 struct ZookeeperStatus {
     nodes: Vec<String>,
     wchc_all: Vec<Vec<String>>,
-}
-
-fn get_fiber_dump() -> Result<FiberDump, Box<dyn Error>> {
-    zio::zmx_client::get_dump().map(|a| {
-        let mut fiber_ids: Vec<Fiber> = vec![];
-        let mut fiber_dumps: Vec<String> = vec![];
-        for (id, dump) in a {
-            fiber_ids.push(id);
-            fiber_dumps.push(dump);
-        }
-    
-        FiberDump {
-            ids: fiber_ids,
-            dumps: fiber_dumps,
-        }
-    })
 }
 
 fn get_zookeeper_status(hosts: Vec<&String>) -> ZookeeperStatus {
@@ -143,6 +119,7 @@ fn get_zookeeper_status(hosts: Vec<&String>) -> ZookeeperStatus {
 
     let mut zookeeper_nodes: Vec<String> = vec![];
     let mut zookeeper_wchc_all: Vec<Vec<String>> = vec![];
+
     //keep the hosts ordering from the original parameter list
     for h in hosts {
         let znode = znode_status.get(h.as_str()).unwrap();
@@ -204,26 +181,26 @@ fn main() -> Result<(), failure::Error> {
         }
     });
 
-    let fd = get_fiber_dump().unwrap();//TODO take care of error
     let zs = get_zookeeper_status(zk_hosts);
-
-    let fd_fmt: Vec<String> = fd.ids.iter().map(|f| f.to_string()).collect();
-
+    
     let mut app = App::new(
         "Panopticon", 
         zs.nodes.iter().map(|z| z.as_str()).collect(), 
         zs.wchc_all.iter().map(|v| v.iter().map(|z| z.as_str()).collect()).collect(),
-        fd_fmt.iter().map(|f| f.as_str()).collect(),
-        fd.dumps.iter().map(|z| z.as_str()).collect()
+        vec![],
+        vec![],
+        // fib_labels.iter().map(|f| f.as_str()).collect(),
+        // fib_dumps.iter().map(|z| z.as_str()).collect(),
     );
 
     terminal.clear()?;
 
     loop {
-        ui::draw(&mut terminal, &app)?;
+        ui::ui::draw(&mut terminal, &app)?;
         match rx.recv()? {
             Event::Input(event) => match event {
                 KeyEvent::Char(c) => app.on_key(c),
+                KeyEvent::Enter => app.on_enter(),
                 KeyEvent::Left => app.on_left(),
                 KeyEvent::Up => app.on_up(),
                 KeyEvent::Right => app.on_right(),

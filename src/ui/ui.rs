@@ -191,13 +191,13 @@ where
                     .render(f, chunks[1]);
             
             }
-            let text = [Text::raw(app.fiber_dump)];
+            let text = [Text::raw(app.fiber_dump.to_owned())];
 
             Paragraph::new(text.iter())
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Fiber dump")
+                        .title("Fiber dump (press <PageUp>/<PageDown> to scroll)")
                         .title_style(Style::default().fg(Color::Cyan)),
                 )
                 .wrap(true)
