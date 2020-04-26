@@ -1,28 +1,25 @@
-# panopticon
+# panopticon-tui
 
-Terminal UI diagnostic tool for your applications.
+Terminal UI diagnostic tool.
 
 Currently supports:
-- ZIO
-- Zookeeper
+- ZIO-ZMX
 
 ## build
 
-for debug
+for dev build
 ```
 cargo build
 ```
 
-for release
+for optimized release build
 ```
 cargo build --release
 ```
 
 ## run
 
-Panopticon uses `netcat` to communicate with Zookeeper nodes, so it requires `nc` to be available in the terminal.
-
-To run it you need to pass a list of addresses for Zookeeper nodes like this:
+To run it you need to pass an addresses of ZIO-ZMX server:
 ```
-./panopticon my_host_x.com:2181 my_host_y.com:2181 my_host_z.com:2181
+./target/debug/panopticon-tui -zio-zmx localhost:1111
 ```

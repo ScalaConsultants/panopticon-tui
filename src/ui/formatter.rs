@@ -5,7 +5,7 @@ use crate::ui::model::UIFiber;
 
 ///
 /// Given a list of fibers returns a list of formatted labels ready to be printed as a tree 
-/// and a corrsponding fiber dumps.
+/// and a corresponding fiber dumps.
 ///
 /// eg. A list of fibers:
 ///       (id: 0, parent_id: None, status: Suspended)

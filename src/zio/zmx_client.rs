@@ -1,27 +1,23 @@
-
 use bytes::BytesMut;
-use redis_protocol::prelude::*;
 use redis_protocol::types::Frame;
-
+use std::error::Error;
 use tokio::io::AsyncWriteExt;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
-use std::error::Error;
-
 use crate::zio::model::{Fiber, FiberStatus};
 
 #[tokio::main]
-pub async fn get_dump() -> Result<Vec<Fiber>, Box<dyn Error>> {
+pub async fn get_dump(addr: &str) -> Result<Vec<Fiber>, Box<dyn Error>> {
     let frame = Frame::Array(vec![Frame::BulkString("dump".into())]);
     let mut buf = BytesMut::new();
 
-    let _ = match encode_bytes(&mut buf, &frame) {
+    let _ = match redis_protocol::prelude::encode_bytes(&mut buf, &frame) {
         Ok(l) => l,
         Err(e) => panic!("Error encoding frame: {:?}", e)
     };
 
-    let mut stream = TcpStream::connect("127.0.0.1:1111").await?;
+    let mut stream = TcpStream::connect(addr).await?;
 
     let _ = stream.write(&buf).await;
 
@@ -30,7 +26,7 @@ pub async fn get_dump() -> Result<Vec<Fiber>, Box<dyn Error>> {
 
     let buf: BytesMut = buffer.into();
 
-    let (frame, consumed) = match decode_bytes(&buf) {
+    let (frame, consumed) = match redis_protocol::prelude::decode_bytes(&buf) {
         Ok((f, c)) => (f, c),
         Err(e) => panic!("Error parsing bytes: {:?}", e)
     };

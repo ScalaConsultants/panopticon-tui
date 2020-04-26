@@ -1,19 +1,13 @@
 
 use std::io;
-use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Modifier, Style};
-//use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Tabs, Text, Widget};
-
 use tui::{
-    backend::Backend, 
     Frame,
     Terminal,
+    backend::Backend, 
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    widgets::{BarChart, Block, Borders, Paragraph, SelectableList, Tabs, Text, Widget},
 };
-
-use tui::widgets::{
-    BarChart, Block, Borders, List, Paragraph, SelectableList, Tabs, Text, Widget,
-};
-
 
 use crate::App;
 
@@ -33,72 +27,11 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io:
             .select(app.tabs.index)
             .render(&mut f, chunks[0]);
         match app.tabs.index {
-            0 => draw_first_tab(&mut f, &app, chunks[1]),
-            2 => draw_zio_tab(&mut f, &app, chunks[1]),
+            // 0 => draw_first_tab(&mut f, &app, chunks[1]),
+            0 => draw_zio_tab(&mut f, &app, chunks[1]),
             _ => {}
         };
     })
-}
-
-fn draw_first_tab<B>(f: &mut Frame<B>, app: &App, area: Rect)
-where
-    B: Backend,
-{
-    let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Min(7),
-                Constraint::Length(3),
-            ]
-            .as_ref(),
-        )
-        .split(area);
-//    draw_gauges(f, app, chunks[0]);
-    draw_zk_nodes_list(f, app, chunks[0]);
-    draw_text(f, chunks[1]);
-}
-
-fn draw_zk_nodes_list<B>(f: &mut Frame<B>, app: &App, area: Rect)
-where
-    B: Backend,
-{
-    let constraints = vec![Constraint::Percentage(100)];
-    let chunks = Layout::default()
-        .constraints(constraints)
-        .direction(Direction::Horizontal)
-        .split(area);
-    {
-        let chunks = Layout::default()
-            .constraints([Constraint::Percentage(100)].as_ref())
-            .split(chunks[0]);
-        {
-            let chunks = Layout::default()
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-                .direction(Direction::Horizontal)
-                .split(chunks[0]);
-            SelectableList::default()
-                .block(Block::default()
-                    .borders(Borders::ALL)
-                    .title_style(Style::default().fg(Color::Cyan).modifier(Modifier::BOLD))
-                    .title("Ensemble"))
-                .items(&app.zookeeper_nodes.items)
-                .select(Some(app.zookeeper_nodes.selected))
-                .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
-                .highlight_symbol(">")
-                .render(f, chunks[0]);
-
-            let items = app.zookeeper_wchc.iter().map(|&it| {
-                Text::styled(format!("{}", it), Style::default().fg(Color::White))
-            });
-
-            List::new(items)
-                .block(Block::default()
-                    .borders(Borders::ALL)
-                    .title_style(Style::default().fg(Color::Cyan).modifier(Modifier::BOLD))
-                    .title("WCHC"))
-                .render(f, chunks[1]);
-        }
-    }
 }
 
 fn draw_text<B>(f: &mut Frame<B>, area: Rect)
@@ -107,7 +40,7 @@ where
 {
     let text = [
         Text::raw("Contact us: "),
-        Text::styled("panopticon@scalac.io", Style::default().fg(Color::Blue)),
+        Text::styled("zio@scalac.io", Style::default().fg(Color::Blue)),
     ];
     Paragraph::new(text.iter())
         .block(

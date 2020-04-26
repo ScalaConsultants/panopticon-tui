@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{Display, Formatter, Result};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Fiber {
@@ -8,8 +8,8 @@ pub struct Fiber {
     pub dump: String,
 }
 
-impl fmt::Display for Fiber {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for Fiber {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{} {:?} {}", self.id, self.parent_id, self.status)
     }
 }
@@ -22,8 +22,8 @@ pub enum FiberStatus {
     Suspended,
 }
 
-impl fmt::Display for FiberStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for FiberStatus {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{:?}", self)
     }
 }
