@@ -61,8 +61,8 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    fn dump_len(s: &String) -> u16 {
-        s.lines().collect::<Vec<&str>>().len() as u16
+    fn prepare_dump(s: String) -> (String, u16){
+        (s.clone(), s.lines().collect::<Vec<&str>>().len() as u16)
     }
 
     pub fn new(title: &'a str, zio_zmx_addr: String, fibers: Vec<String>, fiber_dump_all: Vec<String>) -> App<'a> {
@@ -84,8 +84,7 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_previous();
             let n = self.fibers.selected;
-            let dump = self.fiber_dump_all[n].to_owned();
-            self.selected_fiber_dump = (dump.clone(), App::dump_len(&dump));
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone())
         }
     }
 
@@ -94,8 +93,7 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_next();
             let n = self.fibers.selected;
-            let dump = self.fiber_dump_all[n].to_owned();
-            self.selected_fiber_dump = (dump.clone(), App::dump_len(&dump));
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone())
         }
     }
 
@@ -120,8 +118,7 @@ impl<'a> App<'a> {
             self.fibers.items.clear();
             self.fibers.items.append(&mut fib_labels);
             self.fibers.selected = 0;
-            let dump = fib_dumps[0].to_owned();
-            self.selected_fiber_dump = (dump.clone(), App::dump_len(&dump));
+            self.selected_fiber_dump = App::prepare_dump(fib_dumps[0].clone());
             self.fiber_dump_all.clear();
             self.fiber_dump_all.append(&mut fib_dumps);
         }
