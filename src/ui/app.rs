@@ -84,7 +84,8 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_previous();
             let n = self.fibers.selected;
-            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone())
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
+            self.scroll = 0;
         }
     }
 
@@ -93,7 +94,8 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_next();
             let n = self.fibers.selected;
-            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone())
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
+            self.scroll = 0;
         }
     }
 
