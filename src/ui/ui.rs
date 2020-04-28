@@ -3,7 +3,7 @@ use std::io;
 use tui::{
     Frame,
     Terminal,
-    backend::Backend, 
+    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     widgets::{BarChart, Block, Borders, Paragraph, SelectableList, Tabs, Text, Widget},
@@ -122,9 +122,9 @@ where
                     .label_style(Style::default().fg(Color::Yellow))
                     .style(Style::default().fg(Color::Green))
                     .render(f, chunks[1]);
-            
+
             }
-            let text = [Text::raw(app.fiber_dump.to_owned())];
+            let text = [Text::raw(app.selected_fiber_dump.0.to_owned())];
 
             Paragraph::new(text.iter())
                 .block(

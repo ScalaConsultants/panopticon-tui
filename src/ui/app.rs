@@ -53,7 +53,7 @@ pub struct App<'a> {
     pub tabs: TabsState<'a>,
     pub zio_zmx_addr: String,
     pub fibers: ListState<String>,
-    pub fiber_dump: String,
+    pub selected_fiber_dump: (String, u16),
     pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
     pub barchart: Vec<(&'a str, u64)>,
@@ -61,6 +61,10 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
+    fn prepare_dump(s: String) -> (String, u16){
+        (s.clone(), s.lines().collect::<Vec<&str>>().len() as u16)
+    }
+
     pub fn new(title: &'a str, zio_zmx_addr: String, fibers: Vec<String>, fiber_dump_all: Vec<String>) -> App<'a> {
         App {
             title,
@@ -68,7 +72,7 @@ impl<'a> App<'a> {
             tabs: TabsState::new(vec!["ZIO"]),
             zio_zmx_addr: zio_zmx_addr,
             fibers: ListState::new(fibers),
-            fiber_dump: "".to_string(),
+            selected_fiber_dump: ("".to_string(), 1),
             fiber_dump_all: fiber_dump_all,
             scroll: 0,
             barchart: EVENTS.to_vec(),
@@ -80,7 +84,8 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_previous();
             let n = self.fibers.selected;
-            self.fiber_dump = self.fiber_dump_all[n].to_owned();
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
+            self.scroll = 0;
         }
     }
 
@@ -89,7 +94,8 @@ impl<'a> App<'a> {
         if tab == 0 {
             self.fibers.select_next();
             let n = self.fibers.selected;
-            self.fiber_dump = self.fiber_dump_all[n].to_owned();
+            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
+            self.scroll = 0;
         }
     }
 
@@ -114,7 +120,7 @@ impl<'a> App<'a> {
             self.fibers.items.clear();
             self.fibers.items.append(&mut fib_labels);
             self.fibers.selected = 0;
-            self.fiber_dump = fib_dumps[0].to_owned();
+            self.selected_fiber_dump = App::prepare_dump(fib_dumps[0].clone());
             self.fiber_dump_all.clear();
             self.fiber_dump_all.append(&mut fib_dumps);
         }
@@ -141,8 +147,7 @@ impl<'a> App<'a> {
     pub fn on_page_down(&mut self) {
         let tab = self.tabs.index;
         if tab == 0 {
-            let n = self.fiber_dump.clone().lines().collect::<Vec<&str>>().len();
-            if self.scroll < n as u16 {
+            if self.scroll < self.selected_fiber_dump.1 {
                 self.scroll += 1;
             }
         }
