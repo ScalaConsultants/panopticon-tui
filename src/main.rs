@@ -1,5 +1,6 @@
 mod ui;
 mod zio;
+mod jmx_client;
 
 use crossterm::{
     input::{input, InputEvent, KeyEvent},
@@ -10,6 +11,7 @@ use std::{
     sync::mpsc,
     thread,
     time::Duration,
+    env,
 };
 use structopt::StructOpt;
 use tui::{
@@ -18,6 +20,7 @@ use tui::{
 };
 
 use ui::app::App;
+use jmx_client::model::JMXConnectionSettings;
 
 enum Event<I> {
     Input(I),
@@ -30,10 +33,35 @@ struct Cli {
     tick_rate: u64,
     #[structopt(long = "zio-zmx")]
     zio_zmx: Option<String>,
+    #[structopt(long = "jmx")]
+    jmx: Option<String>,
+    #[structopt(long = "jmx-username")]
+    jmx_username: Option<String>,
+    #[structopt(long = "jmx-password")]
+    jmx_password: Option<String>,
+    #[structopt(long = "slick-db-pool-name")]
+    slick_db_pool_name: Option<String>,
+}
+
+impl Cli {
+    fn jmx_settings(&self) -> Option<JMXConnectionSettings> {
+        match (&self.jmx, &self.slick_db_pool_name) {
+            (Some(addr), Some(db_pool)) => Some(JMXConnectionSettings {
+                address: addr.clone(),
+                username: self.jmx_username.clone(),
+                password: self.jmx_password.clone(),
+                db_pool_name: db_pool.clone(),
+            }),
+            _ => None
+        }
+    }
 }
 
 fn main() -> Result<(), failure::Error> {
     let cli = Cli::from_args();
+
+    // disable jmx crate logging
+    env::set_var("J4RS_CONSOLE_LOG_LEVEL", "disabled");
 
     let zio_zmx_addr = cli.zio_zmx.to_owned().map(|x| x.clone()).expect("No ZIO-ZMX address.");
 
@@ -65,19 +93,22 @@ fn main() -> Result<(), failure::Error> {
         });
     }
 
+    let tick_rate = cli.tick_rate;
     thread::spawn(move || {
         let tx = tx.clone();
         loop {
             tx.send(Event::Tick).unwrap();
-            thread::sleep(Duration::from_millis(cli.tick_rate));
+            thread::sleep(Duration::from_millis(tick_rate));
         }
     });
 
     let mut app = App::new(
         "ZIO-ZMX-TUI",
-        zio_zmx_addr
+        zio_zmx_addr,
+        cli.jmx_settings(),
     );
 
+    app.connect_to_jmx();
     terminal.clear()?;
 
     loop {

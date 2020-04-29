@@ -2,7 +2,11 @@ use std::iter::Iterator;
 
 use crate::ui::formatter;
 use crate::ui::model::UIFiber;
+use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig};
+use crate::jmx_client::client::JMXClient;
 use crate::zio::zmx_client;
+use jmx::MBeanClient;
+use std::collections::VecDeque;
 
 pub enum TabKind {
     ZMX,
@@ -119,8 +123,52 @@ impl<'a> ZMXTab<'a> {
     }
 }
 
-pub struct SlickTab {
-    pub jmx_addr: String
+pub struct SlickTab<'a> {
+    pub jmx_connection_settings: JMXConnectionSettings,
+    pub jmx: JMXClient,
+    pub has_hikari: bool,
+    pub slick_error: Option<String>,
+    pub slick_metrics: VecDeque<SlickMetrics>,
+    pub slick_config: SlickConfig,
+    pub slick_threads_barchart: Vec<(&'a str, u64)>,
+    pub slick_queue_barchart: Vec<(&'a str, u64)>,
+}
+
+impl<'a> SlickTab<'a> {
+    const MAX_MEASURES: usize = 25;
+
+    fn append_slick_metrics(&mut self, m: SlickMetrics) {
+        if self.slick_metrics.len() > SlickTab::MAX_MEASURES {
+            self.slick_metrics.pop_front();
+        }
+        self.slick_metrics.push_back(m);
+        self.slick_threads_barchart = self.slick_metrics.iter()
+            .map(|x| ("", x.active_threads as u64))
+            .collect();
+        self.slick_queue_barchart = self.slick_metrics.iter()
+            .map(|x| ("", x.queue_size as u64))
+            .collect();
+    }
+
+    fn initialize(&mut self) {
+        match self.jmx.get_slick_config() {
+            Ok(config) => {
+                self.slick_error = None;
+                self.slick_config = config;
+                let dyn_data = self.jmx.get_slick_metrics().unwrap();
+                self.slick_metrics = VecDeque::from(vec![SlickMetrics::ZERO; SlickTab::MAX_MEASURES]);
+                self.append_slick_metrics(dyn_data);
+            }
+            Err(_) =>
+                self.slick_error = Some("No slick jmx metrics found. Are you sure you have registerMbeans=true in your slick config?".to_owned()),
+        }
+    }
+
+    fn tick(&mut self) {
+        if self.slick_error.is_none() {
+            self.append_slick_metrics(self.jmx.get_slick_metrics().unwrap());
+        }
+    }
 }
 
 pub struct ListState<I> {
@@ -149,20 +197,59 @@ pub struct App<'a> {
     pub should_quit: bool,
     pub tabs: TabsState<'a>,
     pub zmx: ZMXTab<'a>,
-    pub slick: Option<SlickTab>,
+    pub jmx_settings: Option<JMXConnectionSettings>,
+    pub jmx_connection_error: Option<String>,
+    pub slick: Option<SlickTab<'a>>,
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, zio_zmx_addr: String) -> App<'a> {
+    pub fn new(title: &'a str, zio_zmx_addr: String, jmx: Option<JMXConnectionSettings>) -> App<'a> {
+        let mut tabs: Vec<Tab> = vec![Tab { kind: TabKind::ZMX, title: "ZMX" }];
+
+        if let Some(_) = jmx {
+            tabs.push(Tab { kind: TabKind::Slick, title: "Slick" })
+        }
+
         App {
             title,
             should_quit: false,
-            tabs: TabsState::new(vec![
-                Tab { kind: TabKind::ZMX, title: "ZMX" },
-                Tab { kind: TabKind::Slick, title: "Slick" },
-            ]),
+            tabs: TabsState::new(tabs),
             zmx: ZMXTab::new(zio_zmx_addr),
-            slick: Some(SlickTab { jmx_addr: "localhost:9019".to_string() }),
+            jmx_settings: jmx,
+            jmx_connection_error: Some("Not connected yet".to_owned()),
+            slick: None,
+        }
+    }
+
+    pub fn connect_to_jmx(&mut self) {
+        match &self.jmx_settings {
+            None => { self.jmx_connection_error = Some("No jmx connection settings specified".to_owned()) }
+            Some(conn) => {
+                let url = jmx::MBeanAddress::service_url(format!(
+                    "service:jmx:rmi://{}/jndi/rmi://{}/jmxrmi",
+                    &conn.address, &conn.address
+                ));
+
+                match MBeanClient::connect(url) {
+                    Err(e) => self.jmx_connection_error = Some(e.to_string()),
+                    Ok(c) => {
+                        let client = JMXClient { connection: c, db_pool_name: conn.db_pool_name.clone() };
+                        self.jmx_connection_error = None;
+                        let mut slick_tab: SlickTab = SlickTab {
+                            jmx_connection_settings: conn.to_owned(),
+                            jmx: client,
+                            has_hikari: false,
+                            slick_error: None,
+                            slick_metrics: VecDeque::new(),
+                            slick_config: SlickConfig { max_queue_size: 0, max_threads: 0 },
+                            slick_threads_barchart: vec![],
+                            slick_queue_barchart: vec![],
+                        };
+                        slick_tab.initialize();
+                        self.slick = Some(slick_tab);
+                    }
+                }
+            }
         }
     }
 
@@ -191,7 +278,7 @@ impl<'a> App<'a> {
     pub fn on_enter(&mut self) {
         match self.tabs.current().kind {
             TabKind::ZMX => self.zmx.dump_fibers(),
-            TabKind::Slick => {}
+            TabKind::Slick => self.connect_to_jmx()
         }
     }
 
@@ -219,9 +306,9 @@ impl<'a> App<'a> {
     }
 
     pub fn on_tick(&mut self) {
-        match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.tick(),
-            TabKind::Slick => {}
+        self.zmx.tick();
+        if let Some(s) = &mut self.slick {
+            s.tick();
         }
     }
 }
