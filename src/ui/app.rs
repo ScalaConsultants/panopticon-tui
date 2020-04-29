@@ -4,26 +4,123 @@ use crate::ui::formatter;
 use crate::ui::model::UIFiber;
 use crate::zio::zmx_client;
 
+pub enum TabKind {
+    ZMX,
+    Slick,
+}
+
+pub struct Tab<'a> {
+    pub kind: TabKind,
+    pub title: &'a str,
+}
+
 pub struct TabsState<'a> {
-    pub titles: Vec<&'a str>,
+    pub tabs: Vec<Tab<'a>>,
     pub index: usize,
 }
 
 impl<'a> TabsState<'a> {
-    pub fn new(titles: Vec<&'a str>) -> TabsState {
-        TabsState { titles, index: 0 }
+    pub fn new(tabs: Vec<Tab<'a>>) -> TabsState {
+        TabsState { tabs, index: 0 }
     }
     pub fn next(&mut self) {
-        self.index = (self.index + 1) % self.titles.len();
+        self.index = (self.index + 1) % self.tabs.len();
     }
 
     pub fn previous(&mut self) {
         if self.index > 0 {
             self.index -= 1;
         } else {
-            self.index = self.titles.len() - 1;
+            self.index = self.tabs.len() - 1;
         }
     }
+
+    pub fn current(&self) -> &Tab<'a> {
+        &self.tabs[self.index]
+    }
+
+    pub fn titles(&self) -> Vec<&'a str> {
+        self.tabs.iter().map(|x| x.title).collect()
+    }
+}
+
+pub struct ZMXTab<'a> {
+    pub zio_zmx_addr: String,
+    pub fibers: ListState<String>,
+    pub selected_fiber_dump: (String, u16),
+    pub fiber_dump_all: Vec<String>,
+    pub scroll: u16,
+    pub barchart: Vec<(&'a str, u64)>,
+}
+
+impl<'a> ZMXTab<'a> {
+    fn new(zio_zmx_addr: String) -> ZMXTab<'a> {
+        ZMXTab {
+            zio_zmx_addr,
+            fibers: ListState::new(vec![]),
+            selected_fiber_dump: ("".to_string(), 1),
+            fiber_dump_all: vec![],
+            scroll: 0,
+            barchart: EVENTS.to_vec(),
+        }
+    }
+
+    fn select_prev_fiber(&mut self) {
+        self.fibers.select_previous();
+        self.on_fiber_change()
+    }
+
+    fn select_next_fiber(&mut self) {
+        self.fibers.select_next();
+        self.on_fiber_change()
+    }
+
+    fn on_fiber_change(&mut self) {
+        let n = self.fibers.selected;
+        self.selected_fiber_dump = ZMXTab::prepare_dump(self.fiber_dump_all[n].clone());
+        self.scroll = 0;
+    }
+
+    fn dump_fibers(&mut self) {
+        let addr = self.zio_zmx_addr.to_owned();
+        let fd = zmx_client::get_dump(&addr).expect(format!("Couldn't get fiber dump from {}", addr.to_owned()).as_str());
+
+        let list: Vec<UIFiber> = formatter::printable_tree(fd);
+        let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
+        let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
+
+        self.fibers.items.clear();
+        self.fibers.items.append(&mut fib_labels);
+        self.fibers.selected = 0;
+        self.selected_fiber_dump = ZMXTab::prepare_dump(fib_dumps[0].clone());
+        self.fiber_dump_all.clear();
+        self.fiber_dump_all.append(&mut fib_dumps);
+    }
+
+    fn scroll_up(&mut self) {
+        if self.scroll > 0 {
+            self.scroll -= 1;
+        }
+    }
+
+    fn scroll_down(&mut self) {
+        if self.scroll < self.selected_fiber_dump.1 {
+            self.scroll += 1;
+        }
+    }
+
+    fn tick(&mut self) {
+        let event = self.barchart.pop().unwrap();
+        self.barchart.insert(0, event);
+    }
+
+    fn prepare_dump(s: String) -> (String, u16) {
+        (s.clone(), s.lines().collect::<Vec<&str>>().len() as u16)
+    }
+}
+
+pub struct SlickTab {
+    pub jmx_addr: String
 }
 
 pub struct ListState<I> {
@@ -51,51 +148,35 @@ pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
     pub tabs: TabsState<'a>,
-    pub zio_zmx_addr: String,
-    pub fibers: ListState<String>,
-    pub selected_fiber_dump: (String, u16),
-    pub fiber_dump_all: Vec<String>,
-    pub scroll: u16,
-    pub barchart: Vec<(&'a str, u64)>,
-
+    pub zmx: ZMXTab<'a>,
+    pub slick: Option<SlickTab>,
 }
 
 impl<'a> App<'a> {
-    fn prepare_dump(s: String) -> (String, u16){
-        (s.clone(), s.lines().collect::<Vec<&str>>().len() as u16)
-    }
-
-    pub fn new(title: &'a str, zio_zmx_addr: String, fibers: Vec<String>, fiber_dump_all: Vec<String>) -> App<'a> {
+    pub fn new(title: &'a str, zio_zmx_addr: String) -> App<'a> {
         App {
             title,
             should_quit: false,
-            tabs: TabsState::new(vec!["ZIO"]),
-            zio_zmx_addr: zio_zmx_addr,
-            fibers: ListState::new(fibers),
-            selected_fiber_dump: ("".to_string(), 1),
-            fiber_dump_all: fiber_dump_all,
-            scroll: 0,
-            barchart: EVENTS.to_vec(),
+            tabs: TabsState::new(vec![
+                Tab { kind: TabKind::ZMX, title: "ZMX" },
+                Tab { kind: TabKind::Slick, title: "Slick" },
+            ]),
+            zmx: ZMXTab::new(zio_zmx_addr),
+            slick: Some(SlickTab { jmx_addr: "localhost:9019".to_string() }),
         }
     }
 
     pub fn on_up(&mut self) {
-        let tab = self.tabs.index;
-        if tab == 0 {
-            self.fibers.select_previous();
-            let n = self.fibers.selected;
-            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
-            self.scroll = 0;
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.select_prev_fiber(),
+            TabKind::Slick => {}
         }
     }
 
     pub fn on_down(&mut self) {
-        let tab = self.tabs.index;
-        if tab == 0 {
-            self.fibers.select_next();
-            let n = self.fibers.selected;
-            self.selected_fiber_dump = App::prepare_dump(self.fiber_dump_all[n].clone());
-            self.scroll = 0;
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.select_next_fiber(),
+            TabKind::Slick => {}
         }
     }
 
@@ -108,21 +189,9 @@ impl<'a> App<'a> {
     }
 
     pub fn on_enter(&mut self) {
-        let tab = self.tabs.index;
-        if tab == 0 {
-            let addr = self.zio_zmx_addr.to_owned();
-            let fd = zmx_client::get_dump(&addr).expect(format!("Couldn't get fiber dump from {}", addr.to_owned()).as_str());
-
-            let list: Vec<UIFiber> = formatter::printable_tree(fd);
-            let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
-            let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
-
-            self.fibers.items.clear();
-            self.fibers.items.append(&mut fib_labels);
-            self.fibers.selected = 0;
-            self.selected_fiber_dump = App::prepare_dump(fib_dumps[0].clone());
-            self.fiber_dump_all.clear();
-            self.fiber_dump_all.append(&mut fib_dumps);
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.dump_fibers(),
+            TabKind::Slick => {}
         }
     }
 
@@ -136,26 +205,24 @@ impl<'a> App<'a> {
     }
 
     pub fn on_page_up(&mut self) {
-        let tab = self.tabs.index;
-        if tab == 0 {
-            if self.scroll > 0 {
-                self.scroll -= 1;
-            }
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.scroll_up(),
+            TabKind::Slick => {}
         }
     }
 
     pub fn on_page_down(&mut self) {
-        let tab = self.tabs.index;
-        if tab == 0 {
-            if self.scroll < self.selected_fiber_dump.1 {
-                self.scroll += 1;
-            }
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.scroll_down(),
+            TabKind::Slick => {}
         }
     }
 
     pub fn on_tick(&mut self) {
-        let event = self.barchart.pop().unwrap();
-        self.barchart.insert(0, event);
+        match self.tabs.current().kind {
+            TabKind::ZMX => self.zmx.tick(),
+            TabKind::Slick => {}
+        }
     }
 }
 

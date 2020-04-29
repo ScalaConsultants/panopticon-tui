@@ -1,4 +1,3 @@
-
 use std::io;
 use tui::{
     Frame,
@@ -10,6 +9,7 @@ use tui::{
 };
 
 use crate::App;
+use crate::ui::app::{TabKind, ZMXTab, SlickTab};
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
@@ -21,22 +21,20 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io:
                 .borders(Borders::ALL)
                 .title_style(Style::default().fg(Color::Blue).modifier(Modifier::BOLD))
                 .title(app.title))
-            .titles(&app.tabs.titles)
+            .titles(&app.tabs.titles())
             .style(Style::default().fg(Color::Green))
             .highlight_style(Style::default().fg(Color::Yellow))
             .select(app.tabs.index)
             .render(&mut f, chunks[0]);
-        match app.tabs.index {
-            // 0 => draw_first_tab(&mut f, &app, chunks[1]),
-            0 => draw_zio_tab(&mut f, &app, chunks[1]),
-            _ => {}
+        match app.tabs.current().kind {
+            TabKind::ZMX => draw_zio_tab(&mut f, &app.zmx, chunks[1]),
+            TabKind::Slick => draw_slick_tab(&mut f, &app.slick.as_ref().unwrap(), chunks[1]),
         };
     })
 }
 
 fn draw_text<B>(f: &mut Frame<B>, area: Rect)
-where
-    B: Backend,
+    where B: Backend,
 {
     let text = [
         Text::raw("Contact us: "),
@@ -53,27 +51,46 @@ where
         .render(f, area);
 }
 
-fn draw_zio_tab<B>(f: &mut Frame<B>, app: &App, area: Rect)
-where
-    B: Backend,
+fn draw_slick_tab<B>(f: &mut Frame<B>, zmx: &SlickTab, area: Rect)
+    where B: Backend,
 {
     let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Min(7),
-                Constraint::Length(3),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
         .split(area);
-//    draw_gauges(f, app, chunks[0]);
-    draw_fiber_list(f, app, chunks[0]);
+    draw_slick_graphs(f, zmx, chunks[0]);
     draw_text(f, chunks[1]);
 }
 
-fn draw_fiber_list<B>(f: &mut Frame<B>, app: &App, area: Rect)
-where
-    B: Backend,
+fn draw_slick_graphs<B>(f: &mut Frame<B>, slick: &SlickTab, area: Rect)
+    where B: Backend,
+{
+    let text = [
+        Text::raw("<TBD> Here's gonna be slick graphs, taken from jmx address: "),
+        Text::styled(slick.jmx_addr.to_owned(), Style::default().fg(Color::Blue)),
+    ];
+
+    Paragraph::new(text.iter())
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Slick JMX data")
+                .title_style(Style::default().fg(Color::Cyan))
+        )
+        .render(f, area);
+}
+
+fn draw_zio_tab<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
+    where B: Backend,
+{
+    let chunks = Layout::default()
+        .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
+        .split(area);
+    draw_fiber_list(f, zmx, chunks[0]);
+    draw_text(f, chunks[1]);
+}
+
+fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
+    where B: Backend,
 {
     let constraints = vec![Constraint::Percentage(100)];
     let chunks = Layout::default()
@@ -99,8 +116,8 @@ where
                         .borders(Borders::ALL)
                         .title_style(Style::default().fg(Color::Cyan))
                         .title("Fibers (press <Enter> to take a snapshot)"))
-                    .items(&app.fibers.items)
-                    .select(Some(app.fibers.selected))
+                    .items(&zmx.fibers.items)
+                    .select(Some(zmx.fibers.selected))
                     .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
                     .highlight_symbol(">")
                     .render(f, chunks[0]);
@@ -110,7 +127,7 @@ where
                         .borders(Borders::ALL)
                         .title_style(Style::default().fg(Color::Cyan))
                         .title("Fiber count"))
-                    .data(&app.barchart)
+                    .data(&zmx.barchart)
                     .bar_width(3)
                     .bar_gap(2)
                     .value_style(
@@ -122,9 +139,8 @@ where
                     .label_style(Style::default().fg(Color::Yellow))
                     .style(Style::default().fg(Color::Green))
                     .render(f, chunks[1]);
-
             }
-            let text = [Text::raw(app.selected_fiber_dump.0.to_owned())];
+            let text = [Text::raw(zmx.selected_fiber_dump.0.to_owned())];
 
             Paragraph::new(text.iter())
                 .block(
@@ -134,7 +150,7 @@ where
                         .title_style(Style::default().fg(Color::Cyan)),
                 )
                 .wrap(true)
-                .scroll(app.scroll)
+                .scroll(zmx.scroll)
                 .render(f, chunks[1]);
         }
     }

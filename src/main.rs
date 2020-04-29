@@ -14,7 +14,7 @@ use std::{
 use structopt::StructOpt;
 use tui::{
     Terminal,
-    backend::CrosstermBackend, 
+    backend::CrosstermBackend,
 };
 
 use ui::app::App;
@@ -74,10 +74,8 @@ fn main() -> Result<(), failure::Error> {
     });
 
     let mut app = App::new(
-        "ZIO-ZMX-TUI", 
-        zio_zmx_addr,
-        vec![],
-        vec![],
+        "ZIO-ZMX-TUI",
+        zio_zmx_addr
     );
 
     terminal.clear()?;
