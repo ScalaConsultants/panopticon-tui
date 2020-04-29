@@ -23,3 +23,11 @@ pub struct SlickConfig {
     pub max_threads: i32,
     pub max_queue_size: i32,
 }
+
+#[derive(Clone)]
+pub struct HikariMetrics {
+    pub total: i32,
+    pub active: i32,
+    pub idle: i32,
+    pub waiting: i32,
+}

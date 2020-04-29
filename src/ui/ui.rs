@@ -6,11 +6,12 @@ use tui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     Terminal,
-    widgets::{BarChart, Block, Borders, Paragraph, SelectableList, Tabs, Text, Widget},
+    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, Marker, Paragraph, SelectableList, Tabs, Text, Widget},
 };
 
 use crate::App;
 use crate::ui::app::{SlickTab, TabKind, ZMXTab};
+use crate::jmx_client::model::HikariMetrics;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
@@ -97,7 +98,7 @@ fn draw_database_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     {
         draw_slick_graphs(f, db, chunks[0]);
         if db.has_hikari {
-            draw_slick_graphs(f, db, chunks[1]);
+            draw_hikari_graphs(f, db, chunks[1]);
         }
     }
 }
@@ -109,13 +110,16 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(area);
 
+    let slick_threads_barchart: Vec<(&str, u64)> = db.slick_metrics.iter()
+        .map(|x| ("", x.active_threads as u64))
+        .collect();
     let active_threads = db.slick_metrics.back().map_or(0, |x| x.active_threads);
     BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
             .title(format!("Slick active threads: {} (max: {})", active_threads, db.slick_config.max_threads).as_ref()))
-        .data(&db.slick_threads_barchart)
+        .data(&slick_threads_barchart)
         .max(db.slick_config.max_threads as u64)
         .bar_width(3)
         .bar_gap(1)
@@ -127,13 +131,16 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
         .style(Style::default().fg(Color::Green))
         .render(f, chunks[0]);
 
+    let slick_queue_barchart: Vec<(&str, u64)> = db.slick_metrics.iter()
+        .map(|x| ("", x.queue_size as u64))
+        .collect();
     let queue_size = db.slick_metrics.back().map_or(0, |x| x.queue_size);
     BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
             .title(format!("Slick queue size: {} (max: {})", queue_size, db.slick_config.max_queue_size).as_ref()))
-        .data(&db.slick_queue_barchart)
+        .data(&slick_queue_barchart)
         .max(db.slick_config.max_queue_size as u64)
         .bar_width(3)
         .bar_gap(1)
@@ -145,6 +152,82 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
         .style(Style::default().fg(Color::Blue))
         .render(f, chunks[1]);
 }
+
+fn hikari_chart<F>(db: &SlickTab, f: F) -> Vec<(f64, f64)>
+    where F: Fn(&HikariMetrics) -> i32, {
+    db.hikari_metrics.iter().enumerate()
+        .map(|(i, x)| (i as f64, f(x) as f64))
+        .collect()
+}
+
+fn draw_hikari_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
+    where B: Backend,
+{
+    let total_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.total);
+    let active_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.active);
+    let idle_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.idle);
+    let waiting_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.waiting);
+
+    let datasets = [
+        Dataset::default()
+            .name("total")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::Blue))
+            .data(&total_chart),
+        Dataset::default()
+            .name("active")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::Red))
+            .data(&active_chart),
+        Dataset::default()
+            .name("waiting")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::Yellow))
+            .data(&waiting_chart),
+        Dataset::default()
+            .name("idle")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::Green))
+            .data(&idle_chart)
+    ];
+
+    let max_connections = db.hikari_metrics.back().map_or(99, |x| x.total);
+    let total_connections = db.hikari_metrics.back().map_or(0, |x| x.total);
+    let active_connections = db.hikari_metrics.back().map_or(0, |x| x.active);
+    let waiting_connections = db.hikari_metrics.back().map_or(0, |x| x.waiting);
+    let idle_connections = db.hikari_metrics.back().map_or(0, |x| x.idle);
+
+    Chart::default()
+        .block(
+            Block::default()
+                .title(&format!(
+                    "HikariCP (total={}, active={}, idle={}, waiting={})",
+                    total_connections,
+                    active_connections,
+                    idle_connections,
+                    waiting_connections
+                ))
+                .title_style(Style::default().fg(Color::Cyan))
+                .borders(Borders::ALL)
+        )
+        .x_axis(
+            Axis::default()
+                .style(Style::default().fg(Color::Gray))
+                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .bounds([0.0, SlickTab::MAX_HIKARI_MEASURES as f64])
+                .labels(&["older", "recent"])
+        )
+        .y_axis(
+            Axis::default()
+                .style(Style::default().fg(Color::Gray))
+                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .bounds([-1.0, (max_connections + 1) as f64])
+                .labels(&["0".to_owned(), ((max_connections as f64) / 2.0).to_string(), max_connections.to_string()])
+        )
+        .datasets(&datasets)
+        .render(f, area);
+}
+
 
 fn draw_zio_tab<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
     where B: Backend,

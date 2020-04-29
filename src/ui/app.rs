@@ -2,7 +2,7 @@ use std::iter::Iterator;
 
 use crate::ui::formatter;
 use crate::ui::model::UIFiber;
-use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig};
+use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig, HikariMetrics};
 use crate::jmx_client::client::JMXClient;
 use crate::zio::zmx_client;
 use jmx::MBeanClient;
@@ -123,31 +123,32 @@ impl<'a> ZMXTab<'a> {
     }
 }
 
-pub struct SlickTab<'a> {
+pub struct SlickTab {
     pub jmx_connection_settings: JMXConnectionSettings,
     pub jmx: JMXClient,
     pub has_hikari: bool,
     pub slick_error: Option<String>,
     pub slick_metrics: VecDeque<SlickMetrics>,
     pub slick_config: SlickConfig,
-    pub slick_threads_barchart: Vec<(&'a str, u64)>,
-    pub slick_queue_barchart: Vec<(&'a str, u64)>,
+    pub hikari_metrics: VecDeque<HikariMetrics>,
 }
 
-impl<'a> SlickTab<'a> {
-    const MAX_MEASURES: usize = 25;
+impl SlickTab {
+    pub const MAX_SLICK_MEASURES: usize = 25;
+    pub const MAX_HIKARI_MEASURES: usize = 100;
 
     fn append_slick_metrics(&mut self, m: SlickMetrics) {
-        if self.slick_metrics.len() > SlickTab::MAX_MEASURES {
+        if self.slick_metrics.len() > SlickTab::MAX_SLICK_MEASURES {
             self.slick_metrics.pop_front();
         }
         self.slick_metrics.push_back(m);
-        self.slick_threads_barchart = self.slick_metrics.iter()
-            .map(|x| ("", x.active_threads as u64))
-            .collect();
-        self.slick_queue_barchart = self.slick_metrics.iter()
-            .map(|x| ("", x.queue_size as u64))
-            .collect();
+    }
+
+    fn append_hikari_metrics(&mut self, m: HikariMetrics) {
+        if self.hikari_metrics.len() > SlickTab::MAX_HIKARI_MEASURES {
+            self.hikari_metrics.pop_front();
+        }
+        self.hikari_metrics.push_back(m);
     }
 
     fn initialize(&mut self) {
@@ -156,17 +157,21 @@ impl<'a> SlickTab<'a> {
                 self.slick_error = None;
                 self.slick_config = config;
                 let dyn_data = self.jmx.get_slick_metrics().unwrap();
-                self.slick_metrics = VecDeque::from(vec![SlickMetrics::ZERO; SlickTab::MAX_MEASURES]);
+                self.slick_metrics = VecDeque::from(vec![SlickMetrics::ZERO; SlickTab::MAX_SLICK_MEASURES]);
                 self.append_slick_metrics(dyn_data);
             }
             Err(_) =>
                 self.slick_error = Some("No slick jmx metrics found. Are you sure you have registerMbeans=true in your slick config?".to_owned()),
         }
+        self.has_hikari = self.jmx.get_hikari_metrics().is_ok();
     }
 
     fn tick(&mut self) {
         if self.slick_error.is_none() {
             self.append_slick_metrics(self.jmx.get_slick_metrics().unwrap());
+        }
+        if self.has_hikari {
+            self.append_hikari_metrics(self.jmx.get_hikari_metrics().unwrap());
         }
     }
 }
@@ -199,7 +204,7 @@ pub struct App<'a> {
     pub zmx: ZMXTab<'a>,
     pub jmx_settings: Option<JMXConnectionSettings>,
     pub jmx_connection_error: Option<String>,
-    pub slick: Option<SlickTab<'a>>,
+    pub slick: Option<SlickTab>,
 }
 
 impl<'a> App<'a> {
@@ -242,8 +247,7 @@ impl<'a> App<'a> {
                             slick_error: None,
                             slick_metrics: VecDeque::new(),
                             slick_config: SlickConfig { max_queue_size: 0, max_threads: 0 },
-                            slick_threads_barchart: vec![],
-                            slick_queue_barchart: vec![],
+                            hikari_metrics: VecDeque::new(),
                         };
                         slick_tab.initialize();
                         self.slick = Some(slick_tab);
