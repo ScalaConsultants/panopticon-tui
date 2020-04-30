@@ -3,11 +3,15 @@ use jmx::{MBeanClient, MBeanClientTrait};
 use serde::de::DeserializeOwned;
 
 pub struct JMXClient {
-    pub connection: MBeanClient,
-    pub db_pool_name: String,
+    connection: MBeanClient,
+    db_pool_name: String,
 }
 
 impl JMXClient {
+    pub fn new(connection: MBeanClient, db_pool_name: String) -> JMXClient {
+        JMXClient { connection, db_pool_name }
+    }
+
     pub fn get_hikari_metrics(&self) -> Result<HikariMetrics, jmx::Error> {
         let total: i32 = self.get_hikari_attribute("TotalConnections")?;
         let active: i32 = self.get_hikari_attribute("ActiveConnections")?;

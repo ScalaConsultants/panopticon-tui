@@ -238,7 +238,7 @@ impl<'a> App<'a> {
                 match MBeanClient::connect(url) {
                     Err(e) => self.jmx_connection_error = Some(e.to_string()),
                     Ok(c) => {
-                        let client = JMXClient { connection: c, db_pool_name: conn.db_pool_name.clone() };
+                        let client = JMXClient::new(c, conn.db_pool_name.clone());
                         self.jmx_connection_error = None;
                         let mut slick_tab: SlickTab = SlickTab {
                             jmx_connection_settings: conn.to_owned(),
