@@ -16,3 +16,5 @@ redis-protocol = "1.0.0"
 futures = "0.3.4"
 tokio = { version = "0.2", features = ["full"] }
 structopt = "0.3"
+jmx = "0.2.0"
+serde = "1.0.106"
