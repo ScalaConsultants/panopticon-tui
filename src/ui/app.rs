@@ -4,9 +4,9 @@ use crate::ui::formatter;
 use crate::ui::model::UIFiber;
 use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig, HikariMetrics};
 use crate::jmx_client::client::JMXClient;
-use crate::zio::zmx_client;
 use jmx::MBeanClient;
 use std::collections::VecDeque;
+use crate::zio::zmx_client::{ZMXClient, NetworkZMXClient};
 
 pub enum TabKind {
     ZMX,
@@ -49,23 +49,23 @@ impl<'a> TabsState<'a> {
 }
 
 pub struct ZMXTab<'a> {
-    pub zio_zmx_addr: String,
     pub fibers: ListState<String>,
     pub selected_fiber_dump: (String, u16),
     pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
     pub barchart: Vec<(&'a str, u64)>,
+    pub zmx_client: Box<dyn ZMXClient>,
 }
 
 impl<'a> ZMXTab<'a> {
     fn new(zio_zmx_addr: String) -> ZMXTab<'a> {
         ZMXTab {
-            zio_zmx_addr,
             fibers: ListState::new(vec![]),
             selected_fiber_dump: ("".to_string(), 1),
             fiber_dump_all: vec![],
             scroll: 0,
             barchart: EVENTS.to_vec(),
+            zmx_client: Box::new(NetworkZMXClient::new(zio_zmx_addr)),
         }
     }
 
@@ -86,8 +86,7 @@ impl<'a> ZMXTab<'a> {
     }
 
     fn dump_fibers(&mut self) {
-        let addr = self.zio_zmx_addr.to_owned();
-        let fd = zmx_client::get_dump(&addr).expect(format!("Couldn't get fiber dump from {}", addr.to_owned()).as_str());
+        let fd = self.zmx_client.dump_fibers().expect(format!("Couldn't get fiber dump from {}", self.zmx_client.address()).as_str());
 
         let list: Vec<UIFiber> = formatter::printable_tree(fd);
         let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
@@ -343,3 +342,54 @@ const EVENTS: [(&'static str, u64); 24] = [
     ("B23", 3),
     ("B24", 5),
 ];
+
+/// TESTS
+#[cfg(test)]
+mod tests {
+    use crate::ui::app::{ZMXTab, ListState};
+    use crate::zio::zmx_client::StubZMXClient;
+    use crate::zio::model::{Fiber, FiberStatus};
+
+    #[test]
+    fn zmx_tab_dumps_fibers() {
+        let fiber1 = Fiber {
+            id: 1,
+            parent_id: None,
+            status: FiberStatus::Running,
+            dump: "1".to_owned(),
+        };
+        let fiber2 = Fiber {
+            id: 2,
+            parent_id: Some(1),
+            status: FiberStatus::Suspended,
+            dump: "2".to_owned(),
+        };
+        let fiber4 = Fiber {
+            id: 4,
+            parent_id: None,
+            status: FiberStatus::Done,
+            dump: "4".to_owned(),
+        };
+
+        let fibers = vec![fiber1, fiber2, fiber4];
+
+        let mut tab = ZMXTab {
+            fibers: ListState::new(vec!["Fiber #1".to_owned()]),
+            selected_fiber_dump: ("".to_string(), 0),
+            fiber_dump_all: vec![],
+            scroll: 0,
+            barchart: vec![],
+            zmx_client: Box::new(StubZMXClient::new(Ok(fibers))),
+        };
+
+        tab.dump_fibers();
+
+        assert_eq!(tab.fiber_dump_all, vec!["1", "2", "4"]);
+        assert_eq!(tab.fibers.items, vec![
+            "├─#1         Running",
+            "│ └─#2       Suspended",
+            "└─#4         Done"
+        ]);
+        assert_eq!(tab.fibers.selected, 0);
+    }
+}
