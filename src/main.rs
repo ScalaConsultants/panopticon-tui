@@ -27,25 +27,36 @@ enum Event<I> {
     Tick,
 }
 
+/// At least one of the following option sets has to be specified for panopticon-tui to launch:
+///
+/// - zio-zmx
+///
+/// - jmx + db-pool-name
 #[derive(Debug, StructOpt)]
 struct Cli {
+    /// Frequency to use for fetching metrics
     #[structopt(long = "tick-rate", default_value = "2000")]
     tick_rate: u64,
+    /// Address of zio-zmx server, e.g. localhost:6789
     #[structopt(long = "zio-zmx")]
     zio_zmx: Option<String>,
+    /// Address of remote jmx source, e.g. localhost:9010
     #[structopt(long = "jmx")]
     jmx: Option<String>,
+    /// Optional username for authorized jmx access
     #[structopt(long = "jmx-username")]
     jmx_username: Option<String>,
+    /// Optional password for authorized jmx access
     #[structopt(long = "jmx-password")]
     jmx_password: Option<String>,
-    #[structopt(long = "slick-db-pool-name")]
-    slick_db_pool_name: Option<String>,
+    /// Connection pool name, used to qualify JMX beans for Slick and/or HikariCP
+    #[structopt(long = "db-pool-name")]
+    db_pool_name: Option<String>,
 }
 
 impl Cli {
     fn jmx_settings(&self) -> Option<JMXConnectionSettings> {
-        match (&self.jmx, &self.slick_db_pool_name) {
+        match (&self.jmx, &self.db_pool_name) {
             (Some(addr), Some(db_pool)) => Some(JMXConnectionSettings {
                 address: addr.clone(),
                 username: self.jmx_username.clone(),
@@ -63,7 +74,12 @@ fn main() -> Result<(), failure::Error> {
     // disable jmx crate logging
     env::set_var("J4RS_CONSOLE_LOG_LEVEL", "disabled");
 
-    let zio_zmx_addr = cli.zio_zmx.to_owned().map(|x| x.clone()).expect("No ZIO-ZMX address.");
+    if cli.zio_zmx.is_none() && cli.jmx_settings().is_none() {
+        let mut clap = Cli::clap();
+        println!("Nothing to monitor. Please check the following help message.\n");
+        clap.print_long_help().expect("Failed printing help message");
+        return Ok(());
+    }
 
     let screen = AlternateScreen::to_alternate(true)?;
     let backend = CrosstermBackend::with_alternate_screen(stdout(), screen)?;
@@ -104,7 +120,7 @@ fn main() -> Result<(), failure::Error> {
 
     let mut app = App::new(
         "ZIO-ZMX-TUI",
-        zio_zmx_addr,
+        cli.zio_zmx.clone(),
         cli.jmx_settings(),
     );
 

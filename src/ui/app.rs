@@ -200,15 +200,19 @@ pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
     pub tabs: TabsState<'a>,
-    pub zmx: ZMXTab<'a>,
+    pub zmx: Option<ZMXTab<'a>>,
     pub jmx_settings: Option<JMXConnectionSettings>,
     pub jmx_connection_error: Option<String>,
     pub slick: Option<SlickTab>,
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, zio_zmx_addr: String, jmx: Option<JMXConnectionSettings>) -> App<'a> {
-        let mut tabs: Vec<Tab> = vec![Tab { kind: TabKind::ZMX, title: "ZMX" }];
+    pub fn new(title: &'a str, zio_zmx_addr: Option<String>, jmx: Option<JMXConnectionSettings>) -> App<'a> {
+        let mut tabs: Vec<Tab> = vec![];
+
+        if let Some(_) = zio_zmx_addr {
+            tabs.push(Tab { kind: TabKind::ZMX, title: "ZMX" })
+        }
 
         if let Some(_) = jmx {
             tabs.push(Tab { kind: TabKind::Slick, title: "Slick" })
@@ -218,7 +222,7 @@ impl<'a> App<'a> {
             title,
             should_quit: false,
             tabs: TabsState::new(tabs),
-            zmx: ZMXTab::new(zio_zmx_addr),
+            zmx: zio_zmx_addr.map(|x| ZMXTab::new(x)),
             jmx_settings: jmx,
             jmx_connection_error: Some("Not connected yet".to_owned()),
             slick: None,
@@ -258,14 +262,14 @@ impl<'a> App<'a> {
 
     pub fn on_up(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.select_prev_fiber(),
+            TabKind::ZMX => self.zmx.as_mut().unwrap().select_prev_fiber(),
             TabKind::Slick => {}
         }
     }
 
     pub fn on_down(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.select_next_fiber(),
+            TabKind::ZMX => self.zmx.as_mut().unwrap().select_next_fiber(),
             TabKind::Slick => {}
         }
     }
@@ -280,7 +284,7 @@ impl<'a> App<'a> {
 
     pub fn on_enter(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.dump_fibers(),
+            TabKind::ZMX => self.zmx.as_mut().unwrap().dump_fibers(),
             TabKind::Slick => self.connect_to_jmx()
         }
     }
@@ -296,22 +300,24 @@ impl<'a> App<'a> {
 
     pub fn on_page_up(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.scroll_up(),
+            TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_up(),
             TabKind::Slick => {}
         }
     }
 
     pub fn on_page_down(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.scroll_down(),
+            TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_down(),
             TabKind::Slick => {}
         }
     }
 
     pub fn on_tick(&mut self) {
-        self.zmx.tick();
-        if let Some(s) = &mut self.slick {
-            s.tick();
+        if let Some(t) = &mut self.zmx {
+            t.tick();
+        }
+        if let Some(r) = &mut self.slick {
+            r.tick();
         }
     }
 }
