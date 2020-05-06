@@ -29,7 +29,7 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io:
             .select(app.tabs.index)
             .render(&mut f, chunks[0]);
         match app.tabs.current().kind {
-            TabKind::ZMX => draw_zio_tab(&mut f, &app.zmx, chunks[1]),
+            TabKind::ZMX => draw_zio_tab(&mut f, &app.zmx.as_ref().unwrap(), chunks[1]),
             TabKind::Slick => draw_slick_tab(&mut f, &app.slick.as_ref().unwrap(), chunks[1]),
         };
     })

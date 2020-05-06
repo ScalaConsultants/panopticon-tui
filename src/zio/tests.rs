@@ -1,8 +1,8 @@
-use crate::zio::dump_parser::parse_fiber_dump;
-use crate::zio::model::{Fiber, FiberStatus};
-
 #[test]
 fn dump_parser_done() {
+    use crate::zio::dump_parser::parse_fiber_dump;
+    use crate::zio::model::{Fiber, FiberStatus};
+
     let dump = "#4 (7h432m25965s25965835ms)
     Status: Done()";
 
@@ -17,6 +17,9 @@ fn dump_parser_done() {
 
 #[test]
 fn dump_parser_suspended_with_parent() {
+    use crate::zio::dump_parser::parse_fiber_dump;
+    use crate::zio::model::{Fiber, FiberStatus};
+
     let dump = "#2 (1m98s98260ms) waiting on #2
     Status: Suspended(interruptible, 18 asyncs, zio.Promise.await(Promise.scala:50))
     <something>
@@ -34,6 +37,9 @@ fn dump_parser_suspended_with_parent() {
 
 #[test]
 fn dump_parser_running() {
+    use crate::zio::dump_parser::parse_fiber_dump;
+    use crate::zio::model::{Fiber, FiberStatus};
+
     let dump = "#3 (1m96s96402ms)
     Status: Running()";
 
@@ -48,6 +54,9 @@ fn dump_parser_running() {
 
 #[test]
 fn dump_parser_finishing() {
+    use crate::zio::dump_parser::parse_fiber_dump;
+    use crate::zio::model::{Fiber, FiberStatus};
+
     let dump = "#3 (1m96s96402ms)
     Status: Finishing()";
 
@@ -62,6 +71,7 @@ fn dump_parser_finishing() {
 
 #[test]
 fn dump_parser_unknown_status() {
+    use crate::zio::dump_parser::parse_fiber_dump;
     let dump = "#3 (1m96s96402ms)
     Status: Trolling()";
 
@@ -70,6 +80,7 @@ fn dump_parser_unknown_status() {
 
 #[test]
 fn dump_parser_not_enough_lines() {
+    use crate::zio::dump_parser::parse_fiber_dump;
     assert_eq!(parse_fiber_dump("#3 (1m96s96402ms)".to_owned()), None);
     assert_eq!(parse_fiber_dump("".to_owned()), None);
 }
