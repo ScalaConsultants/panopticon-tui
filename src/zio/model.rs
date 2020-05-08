@@ -27,3 +27,17 @@ impl Display for FiberStatus {
         write!(f, "{:?}", self)
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct FiberCount {
+    pub done: i32,
+    pub finishing: i32,
+    pub running: i32,
+    pub suspended: i32,
+}
+
+impl FiberCount {
+    pub fn total(&self) -> i32 {
+        self.done + self.finishing + self.running + self.suspended
+    }
+}

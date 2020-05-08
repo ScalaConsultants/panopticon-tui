@@ -34,7 +34,8 @@ enum Event<I> {
 /// - jmx + db-pool-name
 #[derive(Debug, StructOpt)]
 struct Cli {
-    /// Frequency to use for fetching metrics
+    /// Frequency (in ms) to use for fetching metrics.
+    /// Don't set this too low, because currently zmx tab does a full fiber dump every tick
     #[structopt(long = "tick-rate", default_value = "2000")]
     tick_rate: u64,
     /// Address of zio-zmx server, e.g. localhost:6789
