@@ -7,6 +7,7 @@ use crate::jmx_client::client::JMXClient;
 use jmx::MBeanClient;
 use std::collections::VecDeque;
 use crate::zio::zmx_client::{ZMXClient, NetworkZMXClient};
+use crate::zio::model::{FiberCount, FiberStatus};
 
 pub enum TabKind {
     ZMX,
@@ -48,25 +49,34 @@ impl<'a> TabsState<'a> {
     }
 }
 
-pub struct ZMXTab<'a> {
+pub struct ZMXTab {
     pub fibers: ListState<String>,
     pub selected_fiber_dump: (String, u16),
     pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
-    pub barchart: Vec<(&'a str, u64)>,
+    pub fiber_counts: VecDeque<FiberCount>,
     pub zmx_client: Box<dyn ZMXClient>,
 }
 
-impl<'a> ZMXTab<'a> {
-    fn new(zio_zmx_addr: String) -> ZMXTab<'a> {
+impl ZMXTab {
+    pub const MAX_FIBER_COUNT_MEASURES: usize = 100;
+
+    fn new(zio_zmx_addr: String) -> ZMXTab {
         ZMXTab {
             fibers: ListState::new(vec![]),
             selected_fiber_dump: ("".to_string(), 1),
             fiber_dump_all: vec![],
             scroll: 0,
-            barchart: EVENTS.to_vec(),
+            fiber_counts: VecDeque::new(),
             zmx_client: Box::new(NetworkZMXClient::new(zio_zmx_addr)),
         }
+    }
+
+    fn append_fiber_count(&mut self, c: FiberCount) {
+        if self.fiber_counts.len() > ZMXTab::MAX_FIBER_COUNT_MEASURES {
+            self.fiber_counts.pop_front();
+        }
+        self.fiber_counts.push_back(c);
     }
 
     fn select_prev_fiber(&mut self) {
@@ -113,8 +123,17 @@ impl<'a> ZMXTab<'a> {
     }
 
     fn tick(&mut self) {
-        let event = self.barchart.pop().unwrap();
-        self.barchart.insert(0, event);
+        let fd = self.zmx_client.dump_fibers().expect(format!("Couldn't get fiber dump from {}", self.zmx_client.address()).as_str());
+        let mut count = FiberCount { done: 0, suspended: 0, running: 0, finishing: 0 };
+        for f in fd.iter() {
+            match f.status {
+                FiberStatus::Done => { count.done += 1 }
+                FiberStatus::Finishing => { count.finishing += 1 }
+                FiberStatus::Running => { count.running += 1 }
+                FiberStatus::Suspended => { count.suspended += 1 }
+            }
+        }
+        self.append_fiber_count(count)
     }
 
     fn prepare_dump(s: String) -> (String, u16) {
@@ -200,7 +219,7 @@ pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
     pub tabs: TabsState<'a>,
-    pub zmx: Option<ZMXTab<'a>>,
+    pub zmx: Option<ZMXTab>,
     pub jmx_settings: Option<JMXConnectionSettings>,
     pub jmx_connection_error: Option<String>,
     pub slick: Option<SlickTab>,
@@ -322,39 +341,13 @@ impl<'a> App<'a> {
     }
 }
 
-const EVENTS: [(&'static str, u64); 24] = [
-    ("B1", 9),
-    ("B2", 12),
-    ("B3", 5),
-    ("B4", 8),
-    ("B5", 2),
-    ("B6", 4),
-    ("B7", 5),
-    ("B8", 9),
-    ("B9", 14),
-    ("B10", 15),
-    ("B11", 1),
-    ("B12", 0),
-    ("B13", 4),
-    ("B14", 6),
-    ("B15", 4),
-    ("B16", 6),
-    ("B17", 4),
-    ("B18", 7),
-    ("B19", 13),
-    ("B20", 8),
-    ("B21", 11),
-    ("B22", 9),
-    ("B23", 3),
-    ("B24", 5),
-];
-
 /// TESTS
 #[cfg(test)]
 mod tests {
     use crate::ui::app::{ZMXTab, ListState};
     use crate::zio::zmx_client::StubZMXClient;
     use crate::zio::model::{Fiber, FiberStatus};
+    use std::collections::VecDeque;
 
     #[test]
     fn zmx_tab_dumps_fibers() {
@@ -384,7 +377,7 @@ mod tests {
             selected_fiber_dump: ("".to_string(), 0),
             fiber_dump_all: vec![],
             scroll: 0,
-            barchart: vec![],
+            fiber_counts: VecDeque::new(),
             zmx_client: Box::new(StubZMXClient::new(Ok(fibers))),
         };
 

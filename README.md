@@ -29,6 +29,8 @@ You can specify zio-zmx server address with `--zio-zmx` option. In this case Pan
 panopticon-tui --zio-zmx localhost:6789
 ```
 
+**⚠️ WARNING**: Currently, zio-zmx doesn't provide efficient ways of getting fiber count metrics, so Panopticon has to do a full fiber dump each tick to calculate them. Make sure your `tick-rate` isn't too frequent.
+
 ### Database metrics over JMX
 
 Panopticon can show database metrics, if your app exposes them via JMX. Slick and HikariCP are the only supported options at the moment.

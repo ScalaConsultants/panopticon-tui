@@ -12,6 +12,7 @@ use tui::{
 use crate::App;
 use crate::ui::app::{SlickTab, TabKind, ZMXTab};
 use crate::jmx_client::model::HikariMetrics;
+use crate::zio::model::FiberCount;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
@@ -239,6 +240,13 @@ fn draw_zio_tab<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
     draw_text(f, chunks[1]);
 }
 
+fn fiber_count_chart<F>(db: &ZMXTab, f: F) -> Vec<(f64, f64)>
+    where F: Fn(&FiberCount) -> i32, {
+    db.fiber_counts.iter().enumerate()
+        .map(|(i, x)| (i as f64, f(x) as f64))
+        .collect()
+}
+
 fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
     where B: Backend,
 {
@@ -258,7 +266,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                 .split(chunks[0]);
             {
                 let chunks = Layout::default()
-                    .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                     .split(chunks[0]);
 
                 SelectableList::default()
@@ -272,24 +280,73 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                     .highlight_symbol(">")
                     .render(f, chunks[0]);
 
-                BarChart::default()
-                    .block(Block::default()
-                        .borders(Borders::ALL)
-                        .title_style(Style::default().fg(Color::Cyan))
-                        .title("Fiber count"))
-                    .data(&zmx.barchart)
-                    .bar_width(3)
-                    .bar_gap(2)
-                    .value_style(
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::Green)
-                            .modifier(Modifier::ITALIC),
+                let running_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.running);
+                let done_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.done);
+                let finishing_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.finishing);
+                let suspended_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.suspended);
+
+                let datasets = [
+                    Dataset::default()
+                        .name("running")
+                        .marker(Marker::Braille)
+                        .style(Style::default().fg(Color::Green))
+                        .data(&running_chart),
+                    Dataset::default()
+                        .name("done")
+                        .marker(Marker::Braille)
+                        .style(Style::default().fg(Color::LightBlue))
+                        .data(&done_chart),
+                    Dataset::default()
+                        .name("finishing")
+                        .marker(Marker::Braille)
+                        .style(Style::default().fg(Color::White))
+                        .data(&finishing_chart),
+                    Dataset::default()
+                        .name("suspended")
+                        .marker(Marker::Braille)
+                        .style(Style::default().fg(Color::Yellow))
+                        .data(&suspended_chart)
+                ];
+
+                let max_fibers = zmx.fiber_counts.iter().map(|x| x.total()).max().unwrap_or(0);
+                let total_fibers =  zmx.fiber_counts.back().map_or(0, |x| x.total());
+                let running_fibers = zmx.fiber_counts.back().map_or(0, |x| x.running);
+                let done_fibers = zmx.fiber_counts.back().map_or(0, |x| x.done);
+                let finishing_fibers = zmx.fiber_counts.back().map_or(0, |x| x.finishing);
+                let suspended_fibers = zmx.fiber_counts.back().map_or(0, |x| x.suspended);
+
+                Chart::default()
+                    .block(
+                        Block::default()
+                            .title(&format!(
+                                "Fibers (total={}, running={}, done={}, finishing={}, suspended={})",
+                                total_fibers,
+                                running_fibers,
+                                done_fibers,
+                                finishing_fibers,
+                                suspended_fibers
+                            ))
+                            .title_style(Style::default().fg(Color::Cyan))
+                            .borders(Borders::ALL)
                     )
-                    .label_style(Style::default().fg(Color::Yellow))
-                    .style(Style::default().fg(Color::Green))
+                    .x_axis(
+                        Axis::default()
+                            .style(Style::default().fg(Color::Gray))
+                            .labels_style(Style::default().modifier(Modifier::ITALIC))
+                            .bounds([0.0, ZMXTab::MAX_FIBER_COUNT_MEASURES as f64])
+                            .labels(&["older", "recent"])
+                    )
+                    .y_axis(
+                        Axis::default()
+                            .style(Style::default().fg(Color::Gray))
+                            .labels_style(Style::default().modifier(Modifier::ITALIC))
+                            .bounds([-1.0, (max_fibers + 1) as f64])
+                            .labels(&["0".to_owned(), ((max_fibers as f64) / 2.0).to_string(), max_fibers.to_string()])
+                    )
+                    .datasets(&datasets)
                     .render(f, chunks[1]);
             }
+
             let text = [Text::raw(zmx.selected_fiber_dump.0.to_owned())];
 
             Paragraph::new(text.iter())
