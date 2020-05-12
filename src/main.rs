@@ -125,11 +125,17 @@ fn main() -> Result<(), failure::Error> {
         cli.jmx_settings(),
     );
 
-    app.connect_to_jmx();
-    terminal.clear()?;
+    if let Err(err) = app.initialize_connections() {
+        app.quit(Some(err));
+    } else {
+        terminal.clear()?;
+    }
+
 
     loop {
-        ui::ui::draw(&mut terminal, &app)?;
+        if !app.should_quit {
+            ui::ui::draw(&mut terminal, &app)?;
+        }
         match rx.recv()? {
             Event::Input(event) => match event {
                 KeyEvent::Char(c) => app.on_key(c),
@@ -147,6 +153,10 @@ fn main() -> Result<(), failure::Error> {
             }
         }
         if app.should_quit {
+            if let Some(message) = app.exit_reason {
+                &terminal.backend().alternate_screen().unwrap().to_main();
+                println!("{}", message);
+            }
             break;
         }
     }
