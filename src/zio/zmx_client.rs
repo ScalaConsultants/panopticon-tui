@@ -49,7 +49,7 @@ impl NetworkZMXClient {
 
         let parsing_result: Result<(), Box<dyn Error>> =
             if let Some(Frame::Array(frames)) = frame {
-                let v: Vec<Result<Fiber, String>> = frames.iter().map(|f| {
+                let v: Result<Vec<Fiber>, String> = frames.iter().map(|f| {
                     let dump = f.as_str()
                         .ok_or(format!("Failed to parse dump - invalid frame: {:?}", f))?;
 
@@ -57,11 +57,9 @@ impl NetworkZMXClient {
                         .ok_or(format!("Unknown dump format, failed to parse: {}", dump))
                 }).collect();
 
-                match v.iter().find_map(|r| r.as_ref().err()) {
-                    Some(err) => Err(Box::from(err.clone())),
-                    None => Ok(v.iter().for_each(|f| {
-                        fibers.push(f.as_ref().unwrap().to_owned())
-                    })),
+                match v {
+                    Ok(fbs) => Ok(fbs.iter().for_each(|f| { fibers.push(f.to_owned()) })),
+                    Err(err) => { Err(Box::from(err.clone())) }
                 }
             } else {
                 Err(Box::from(format!("Incomplete frame, parsed {} bytes", consumed)))
