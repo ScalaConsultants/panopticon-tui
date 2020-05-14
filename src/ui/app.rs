@@ -195,7 +195,7 @@ impl SlickTab {
 
     fn format_error(e: jmx::Error) -> String {
         format!(
-            "No slick jmx metrics found. Are you sure you have registerMbeans=true in your slick config?\r\nUnderlying error: {}", e
+            "No Slick JMX metrics found. Are you sure you have registerMbeans=true in your Slick config?\r\nUnderlying error: {}", e
         )
     }
 
@@ -250,7 +250,7 @@ impl<'a> App<'a> {
         let mut tabs: Vec<Tab> = vec![];
 
         if let Some(_) = zio_zmx_addr {
-            tabs.push(Tab { kind: TabKind::ZMX, title: "ZMX" })
+            tabs.push(Tab { kind: TabKind::ZMX, title: "ZIO" })
         }
 
         if let Some(_) = jmx {
