@@ -352,7 +352,13 @@ fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
     let chunks = Layout::default()
         .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
         .split(area);
-    draw_actor_tree(f, tab, chunks[0]);
+    {
+        let chunks = Layout::default()
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+            .split(chunks[0]);
+        draw_actor_tree(f, tab, chunks[0]);
+        draw_actor_count_chart(f, tab, chunks[1]);
+    }
     draw_text(f, chunks[1]);
 }
 
@@ -369,5 +375,28 @@ fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
         .select(tab.actors.items.first().map(|_| tab.actors.selected))
         .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
         .highlight_symbol(">")
+        .render(f, area);
+}
+
+fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+    where B: Backend,
+{
+    let data: Vec<(&str, u64)> = tab.actor_counts.iter()
+        .map(|x| ("", x.to_owned()))
+        .collect();
+    BarChart::default()
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title_style(Style::default().fg(Color::Cyan))
+            .title(format!("Running actors: {}", tab.actor_counts.back().unwrap_or(&0)).as_ref()))
+        .data(&data)
+        .bar_width(3)
+        .bar_gap(1)
+        .value_style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+        )
+        .style(Style::default().fg(Color::Green))
         .render(f, area);
 }

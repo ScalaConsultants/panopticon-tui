@@ -227,15 +227,18 @@ impl SlickTab {
 pub struct AkkaActorTreeTab {
     pub settings: AkkaActorTreeSettings,
     pub actors: ListState<String>,
+    pub actor_counts: VecDeque<u64>,
 }
 
 impl AkkaActorTreeTab {
+    pub const MAX_ACTOR_COUNT_MEASURES: usize = 50;
+
     fn new(settings: AkkaActorTreeSettings) -> AkkaActorTreeTab {
-        AkkaActorTreeTab { settings, actors: ListState::new(vec![]) }
+        AkkaActorTreeTab { settings, actors: ListState::new(vec![]), actor_counts: VecDeque::new() }
     }
 
     fn reload_actors(&mut self) -> Result<(), String> {
-        let actors = akka_actor_tree::client::get_actors(&self.settings.address, self.settings.timeout)
+        let actors = akka_actor_tree::client::get_actors(&self.settings.tree_address, self.settings.tree_timeout)
             .map_err(|e| format!("Error loading akka actor tree tree: {}", e))?;
 
         let mut list: Vec<String> = formatter::printable_tree(actors, false)
@@ -255,6 +258,20 @@ impl AkkaActorTreeTab {
 
     fn select_next_actor(&mut self) {
         self.actors.select_next();
+    }
+
+    fn append_actor_count(&mut self, c: u64) {
+        if self.actor_counts.len() > AkkaActorTreeTab::MAX_ACTOR_COUNT_MEASURES {
+            self.actor_counts.pop_front();
+        }
+        self.actor_counts.push_back(c);
+    }
+
+    fn tick(&mut self) -> Result<(), String> {
+        let cnt = akka_actor_tree::client::get_actor_count(&self.settings.count_address, self.settings.count_timeout)
+            .map_err(|e| format!("Error loading akka actor count: {}", e))?;
+
+        Ok(self.append_actor_count(cnt))
     }
 }
 
@@ -423,6 +440,11 @@ impl<'a> App<'a> {
             }
         }
         if let Some(r) = &mut self.slick {
+            if let Err(err) = r.tick() {
+                self.quit(Some(err))
+            }
+        }
+        if let Some(r) = &mut self.actor_tree {
             if let Err(err) = r.tick() {
                 self.quit(Some(err))
             }

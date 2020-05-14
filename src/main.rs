@@ -60,6 +60,9 @@ struct Cli {
     /// Address of http endpoint to get akka actor tree
     #[structopt(long = "actor-tree")]
     actor_tree: Option<String>,
+    /// Address of http endpoint to get current actor count
+    #[structopt(long = "actor-count")]
+    actor_count: Option<String>,
     /// Time period (in ms) to assemble akka actor tree
     #[structopt(long = "actor-tree-timeout", default_value = "1000")]
     actor_tree_timeout: u64,
@@ -79,10 +82,15 @@ impl Cli {
     }
 
     fn akka_actor_tree_settings(&self) -> Option<AkkaActorTreeSettings> {
-        self.actor_tree.as_ref().map(|x| AkkaActorTreeSettings {
-            address: x.to_owned(),
-            timeout: self.actor_tree_timeout,
-        })
+        match (&self.actor_tree, &self.actor_count) {
+            (Some(tree_addr), Some(count_addr)) => Some(AkkaActorTreeSettings {
+                tree_address: tree_addr.to_owned(),
+                tree_timeout: self.actor_tree_timeout,
+                count_address: count_addr.to_owned(),
+                count_timeout: (self.tick_rate as f64 * 0.8) as u64,
+            }),
+            _ => None
+        }
     }
 }
 

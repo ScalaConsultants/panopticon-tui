@@ -1,10 +1,15 @@
 use reqwest;
 use serde_json::Value;
+use serde::Deserialize;
 use crate::akka_actor_tree::model::ActorNode;
 use std::collections::HashMap;
 
 pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorNode>, reqwest::Error> {
     get_actors_async(url, timeout)
+}
+
+pub fn get_actor_count(url: &String, timeout: u64) -> Result<u64, reqwest::Error> {
+    get_actor_count_async(url, timeout)
 }
 
 #[tokio::main]
@@ -40,4 +45,16 @@ fn build_actor_tree_iter(json: &Value, parent_id: Option<usize>, actors: &mut Ve
             build_actor_tree_iter(&v, Some(id), actors);
         }
     };
+}
+
+#[derive(Deserialize)]
+struct CountResult {
+    result: u64
+}
+
+#[tokio::main]
+async fn get_actor_count_async(url: &String, timeout: u64) -> Result<u64, reqwest::Error> {
+    let url = format!("{}?timeout={}", url, timeout);
+    let result: CountResult = reqwest::get(&url).await?.json().await?;
+    Ok(result.result)
 }
