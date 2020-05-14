@@ -38,25 +38,34 @@ impl NetworkZMXClient {
 
         let buf: BytesMut = buffer.into();
 
-        let (frame, consumed) = match redis_protocol::prelude::decode_bytes(&buf) {
-            Ok((f, c)) => (f, c),
-            Err(e) => panic!("Error parsing bytes: {:?}", e)
+        let fc = match redis_protocol::prelude::decode_bytes(&buf) {
+            Ok((f, c)) => Ok((f, c)),
+            Err(e) => Err(format!("Error parsing bytes: {:?}", e))
         };
+
+        let (frame, consumed) = fc?;
 
         let mut fibers: Vec<Fiber> = vec![];
 
-        if let Some(Frame::Array(frames)) = frame {
-            let v: Vec<Fiber> = frames.iter().map(|f| {
-                let dump = f.as_str().unwrap();
-                dump_parser::parse_fiber_dump(dump.to_string()).unwrap()
-            }).collect();
-            v.iter().for_each(|f| {
-                fibers.push(f.to_owned());
-                ()
-            });
-        } else {
-            println!("Incomplete frame, parsed {} bytes", consumed);
-        }
+        let parsing_result: Result<(), Box<dyn Error>> =
+            if let Some(Frame::Array(frames)) = frame {
+                let v: Result<Vec<Fiber>, String> = frames.iter().map(|f| {
+                    let dump = f.as_str()
+                        .ok_or(format!("Failed to parse dump - invalid frame: {:?}", f))?;
+
+                    dump_parser::parse_fiber_dump(dump.to_string())
+                        .ok_or(format!("Unknown dump format, failed to parse: {}", dump))
+                }).collect();
+
+                match v {
+                    Ok(fbs) => Ok(fbs.iter().for_each(|f| { fibers.push(f.to_owned()) })),
+                    Err(err) => { Err(Box::from(err.clone())) }
+                }
+            } else {
+                Err(Box::from(format!("Incomplete frame, parsed {} bytes", consumed)))
+            };
+
+        parsing_result?;
 
         Ok(fibers)
     }

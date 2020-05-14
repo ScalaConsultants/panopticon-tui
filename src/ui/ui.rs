@@ -30,8 +30,8 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io:
             .select(app.tabs.index)
             .render(&mut f, chunks[0]);
         match app.tabs.current().kind {
-            TabKind::ZMX => draw_zio_tab(&mut f, &app.zmx.as_ref().unwrap(), chunks[1]),
-            TabKind::Slick => draw_slick_tab(&mut f, &app.slick.as_ref().unwrap(), chunks[1]),
+            TabKind::ZMX => &app.zmx.as_ref().map(|t| draw_zio_tab(&mut f, t, chunks[1])),
+            TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1]))
         };
     })
 }
@@ -61,27 +61,9 @@ fn draw_slick_tab<B>(f: &mut Frame<B>, slick: &SlickTab, area: Rect)
         .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
         .split(area);
 
-    match &slick.slick_error {
-        None => { draw_database_graphs(f, slick, chunks[0]) }
-        Some(err) => { draw_db_connection_error(f, err, chunks[0]) }
-    };
-
+    draw_database_graphs(f, slick, chunks[0]);
     draw_text(f, chunks[1]);
 }
-
-fn draw_db_connection_error<B>(f: &mut Frame<B>, err: &String, area: Rect)
-    where B: Backend,
-{
-    Paragraph::new([Text::raw(format!("Error: {}", err))].iter())
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Database JMX metrics")
-                .title_style(Style::default().fg(Color::Cyan))
-        )
-        .render(f, area);
-}
-
 
 fn draw_database_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     where B: Backend,
@@ -309,7 +291,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                 ];
 
                 let max_fibers = zmx.fiber_counts.iter().map(|x| x.total()).max().unwrap_or(0);
-                let total_fibers =  zmx.fiber_counts.back().map_or(0, |x| x.total());
+                let total_fibers = zmx.fiber_counts.back().map_or(0, |x| x.total());
                 let running_fibers = zmx.fiber_counts.back().map_or(0, |x| x.running);
                 let done_fibers = zmx.fiber_counts.back().map_or(0, |x| x.done);
                 let finishing_fibers = zmx.fiber_counts.back().map_or(0, |x| x.finishing);
