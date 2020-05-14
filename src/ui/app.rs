@@ -3,6 +3,8 @@ use std::iter::Iterator;
 use crate::ui::formatter;
 use crate::ui::model::UIFiber;
 use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig, HikariMetrics};
+use crate::akka_actor_tree::model::AkkaActorTreeSettings;
+use crate::akka_actor_tree;
 use crate::jmx_client::client::JMXClient;
 use jmx::MBeanClient;
 use std::collections::VecDeque;
@@ -12,6 +14,7 @@ use crate::zio::model::{FiberCount, FiberStatus};
 pub enum TabKind {
     ZMX,
     Slick,
+    AkkaActorTree,
 }
 
 pub struct Tab<'a> {
@@ -80,13 +83,17 @@ impl ZMXTab {
     }
 
     fn select_prev_fiber(&mut self) {
-        self.fibers.select_previous();
-        self.on_fiber_change()
+        if !self.fibers.items.is_empty() {
+            self.fibers.select_previous();
+            self.on_fiber_change()
+        }
     }
 
     fn select_next_fiber(&mut self) {
-        self.fibers.select_next();
-        self.on_fiber_change()
+        if !self.fibers.items.is_empty() {
+            self.fibers.select_next();
+            self.on_fiber_change()
+        }
     }
 
     fn on_fiber_change(&mut self) {
@@ -105,7 +112,7 @@ impl ZMXTab {
                 )
             )?;
 
-        let list: Vec<UIFiber> = formatter::printable_tree(fd)
+        let list: Vec<UIFiber> = formatter::printable_tree(fd, true)
             .iter()
             .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
             .collect();
@@ -217,6 +224,40 @@ impl SlickTab {
     }
 }
 
+pub struct AkkaActorTreeTab {
+    pub settings: AkkaActorTreeSettings,
+    pub actors: ListState<String>,
+}
+
+impl AkkaActorTreeTab {
+    fn new(settings: AkkaActorTreeSettings) -> AkkaActorTreeTab {
+        AkkaActorTreeTab { settings, actors: ListState::new(vec![]) }
+    }
+
+    fn reload_actors(&mut self) -> Result<(), String> {
+        let actors = akka_actor_tree::client::get_actors(&self.settings.address, self.settings.timeout)
+            .map_err(|e| format!("Error loading akka actor tree tree: {}", e))?;
+
+        let mut list: Vec<String> = formatter::printable_tree(actors, false)
+            .iter()
+            .map(|x| x.0.to_owned())
+            .collect();
+
+        self.actors.items.clear();
+        self.actors.items.append(&mut list);
+        self.actors.selected = 0;
+        Ok(())
+    }
+
+    fn select_prev_actor(&mut self) {
+        self.actors.select_previous();
+    }
+
+    fn select_next_actor(&mut self) {
+        self.actors.select_next();
+    }
+}
+
 pub struct ListState<I> {
     pub items: Vec<I>,
     pub selected: usize,
@@ -232,7 +273,7 @@ impl<I> ListState<I> {
         }
     }
     fn select_next(&mut self) {
-        if self.selected < self.items.len() - 1 {
+        if !self.items.is_empty() && self.selected < self.items.len() - 1 {
             self.selected += 1
         }
     }
@@ -246,10 +287,15 @@ pub struct App<'a> {
     pub zmx: Option<ZMXTab>,
     pub jmx_settings: Option<JMXConnectionSettings>,
     pub slick: Option<SlickTab>,
+    pub actor_tree: Option<AkkaActorTreeTab>,
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, zio_zmx_addr: Option<String>, jmx: Option<JMXConnectionSettings>) -> App<'a> {
+    pub fn new(
+        title: &'a str,
+        zio_zmx_addr: Option<String>,
+        jmx: Option<JMXConnectionSettings>,
+        akka_actor_tree: Option<AkkaActorTreeSettings>) -> App<'a> {
         let mut tabs: Vec<Tab> = vec![];
 
         if let Some(_) = zio_zmx_addr {
@@ -260,6 +306,10 @@ impl<'a> App<'a> {
             tabs.push(Tab { kind: TabKind::Slick, title: "Slick" })
         }
 
+        if let Some(_) = akka_actor_tree {
+            tabs.push(Tab { kind: TabKind::AkkaActorTree, title: "Actor Tree" })
+        }
+
         App {
             title,
             should_quit: false,
@@ -268,6 +318,7 @@ impl<'a> App<'a> {
             zmx: zio_zmx_addr.map(|x| ZMXTab::new(x)),
             jmx_settings: jmx,
             slick: None,
+            actor_tree: akka_actor_tree.map(|s| AkkaActorTreeTab::new(s)),
         }
     }
 
@@ -303,6 +354,7 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             TabKind::ZMX => self.zmx.as_mut().unwrap().select_prev_fiber(),
             TabKind::Slick => {}
+            TabKind::AkkaActorTree => self.actor_tree.as_mut().unwrap().select_prev_actor(),
         }
     }
 
@@ -310,6 +362,7 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             TabKind::ZMX => self.zmx.as_mut().unwrap().select_next_fiber(),
             TabKind::Slick => {}
+            TabKind::AkkaActorTree => self.actor_tree.as_mut().unwrap().select_next_actor(),
         }
     }
 
@@ -328,6 +381,10 @@ impl<'a> App<'a> {
                     self.quit(Some(err))
                 },
             TabKind::Slick => {}
+            TabKind::AkkaActorTree =>
+                if let Err(err) = self.actor_tree.as_mut().unwrap().reload_actors() {
+                    self.quit(Some(err))
+                }
         }
     }
 
@@ -347,6 +404,7 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_up(),
             TabKind::Slick => {}
+            TabKind::AkkaActorTree => {}
         }
     }
 
@@ -354,6 +412,7 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_down(),
             TabKind::Slick => {}
+            TabKind::AkkaActorTree => {}
         }
     }
 

@@ -1,6 +1,7 @@
 mod ui;
 mod zio;
 mod jmx_client;
+mod akka_actor_tree;
 
 use crossterm::{
     input::{input, InputEvent, KeyEvent},
@@ -21,6 +22,7 @@ use tui::{
 
 use ui::app::App;
 use jmx_client::model::JMXConnectionSettings;
+use crate::akka_actor_tree::model::AkkaActorTreeSettings;
 
 enum Event<I> {
     Input(I),
@@ -32,6 +34,8 @@ enum Event<I> {
 /// - zio-zmx
 ///
 /// - jmx + db-pool-name
+///
+/// - actor-tree
 #[derive(Debug, StructOpt)]
 struct Cli {
     /// Frequency (in ms) to use for fetching metrics.
@@ -53,6 +57,12 @@ struct Cli {
     /// Connection pool name, used to qualify JMX beans for Slick and/or HikariCP
     #[structopt(long = "db-pool-name")]
     db_pool_name: Option<String>,
+    /// Address of http endpoint to get akka actor tree
+    #[structopt(long = "actor-tree")]
+    actor_tree: Option<String>,
+    /// Time period (in ms) to assemble akka actor tree
+    #[structopt(long = "actor-tree-timeout", default_value = "1000")]
+    actor_tree_timeout: u64,
 }
 
 impl Cli {
@@ -66,6 +76,13 @@ impl Cli {
             }),
             _ => None
         }
+    }
+
+    fn akka_actor_tree_settings(&self) -> Option<AkkaActorTreeSettings> {
+        self.actor_tree.as_ref().map(|x| AkkaActorTreeSettings {
+            address: x.to_owned(),
+            timeout: self.actor_tree_timeout,
+        })
     }
 }
 
@@ -123,6 +140,7 @@ fn main() -> Result<(), failure::Error> {
         "ZIO-ZMX-TUI",
         cli.zio_zmx.clone(),
         cli.jmx_settings(),
+        cli.akka_actor_tree_settings(),
     );
 
     if let Err(err) = app.initialize_connections() {

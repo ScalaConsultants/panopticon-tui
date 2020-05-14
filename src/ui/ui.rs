@@ -10,7 +10,7 @@ use tui::{
 };
 
 use crate::App;
-use crate::ui::app::{SlickTab, TabKind, ZMXTab};
+use crate::ui::app::{SlickTab, TabKind, ZMXTab, AkkaActorTreeTab};
 use crate::jmx_client::model::HikariMetrics;
 use crate::zio::model::FiberCount;
 
@@ -31,7 +31,8 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io:
             .render(&mut f, chunks[0]);
         match app.tabs.current().kind {
             TabKind::ZMX => &app.zmx.as_ref().map(|t| draw_zio_tab(&mut f, t, chunks[1])),
-            TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1]))
+            TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
+            TabKind::AkkaActorTree => &app.actor_tree.as_ref().map(|t| draw_actor_tree_tab(&mut f, t, chunks[1])),
         };
     })
 }
@@ -257,7 +258,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                         .title_style(Style::default().fg(Color::Cyan))
                         .title("Fibers (press <Enter> to take a snapshot)"))
                     .items(&zmx.fibers.items)
-                    .select(Some(zmx.fibers.selected))
+                    .select(zmx.fibers.items.first().map(|_| zmx.fibers.selected))
                     .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
                     .highlight_symbol(">")
                     .render(f, chunks[0]);
@@ -343,4 +344,30 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                 .render(f, chunks[1]);
         }
     }
+}
+
+fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+    where B: Backend,
+{
+    let chunks = Layout::default()
+        .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
+        .split(area);
+    draw_actor_tree(f, tab, chunks[0]);
+    draw_text(f, chunks[1]);
+}
+
+
+fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+    where B: Backend,
+{
+    SelectableList::default()
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title_style(Style::default().fg(Color::Cyan))
+            .title("Actors (press <Enter> to reload the tree)"))
+        .items(&tab.actors.items)
+        .select(tab.actors.items.first().map(|_| tab.actors.selected))
+        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+        .highlight_symbol(">")
+        .render(f, area);
 }

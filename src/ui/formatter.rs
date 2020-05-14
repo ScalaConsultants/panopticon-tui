@@ -28,24 +28,24 @@ pub trait TreeWidgetNode {
 /// ├#7     Running
 /// └#6     Suspended
 ///
-pub fn printable_tree<T: Clone + TreeWidgetNode>(items: Vec<T>) -> Vec<(String, T)> {
+pub fn printable_tree<T: Clone + TreeWidgetNode>(items: Vec<T>, print_ids: bool) -> Vec<(String, T)> {
     let tree = &make_tree(items);
 
     // get the initial printable tree
     let temp: Vec<(String, T)> = match tree.get(&None) {
-        Some(v) => print_nodes(v.to_vec(), 0, tree, "".to_string()),
+        Some(v) => print_nodes(v.to_vec(), 0, tree, "".to_string(), print_ids),
         None => vec![]
     };
 
     // find the max length of the line to calculate padding
     let max_len = &temp.iter()
-        .max_by_key(|i| i.0.len())
-        .map_or(0, |i| i.0.len());
+        .max_by_key(|i| i.0.chars().count())
+        .map_or(0, |i| i.0.chars().count());
 
 
     // add label using padding
     temp.iter().map(|i| {
-        (format!("{:width$} {:}", i.0, i.1.label(), width = max_len), i.1.to_owned())
+        (format!("{:width$} {}", i.0, i.1.label(), width = max_len), i.1.to_owned())
     }).collect()
 }
 
@@ -72,16 +72,17 @@ pub fn printable_tree<T: Clone + TreeWidgetNode>(items: Vec<T>) -> Vec<(String, 
 /// ├#7
 /// └#6
 ///
-fn print_nodes<T: Clone + TreeWidgetNode>(items: Vec<T>, level: usize, tree: &HashMap<Option<usize>, Vec<T>>, indent: String) -> Vec<(String, T)> {
+fn print_nodes<T: Clone + TreeWidgetNode>(items: Vec<T>, level: usize, tree: &HashMap<Option<usize>, Vec<T>>, indent: String, print_ids: bool) -> Vec<(String, T)> {
     let size = items.len();
 
     if size == 0 {
         vec![]
     } else {
         let i = items.last().unwrap();
-        let parent: (String, T) = (format!("{:width$}└─#{}", indent.clone(), i.id(), width = level), i.to_owned());
+        let printed_id = if print_ids { i.id().to_string() } else { "".to_string() };
+        let parent: (String, T) = (format!("{:width$}└─#{}", indent.clone(), printed_id, width = level), i.to_owned());
         let mut last_node = tree.get(&Some(i.id())).map(|v|
-            print_nodes(v.to_vec(), level + 1, tree, format!("{}  ", indent.clone()))
+            print_nodes(v.to_vec(), level + 1, tree, format!("{}  ", indent.clone()), print_ids)
         ).unwrap_or(vec![]);
         last_node.insert(0, parent);
 
@@ -89,9 +90,10 @@ fn print_nodes<T: Clone + TreeWidgetNode>(items: Vec<T>, level: usize, tree: &Ha
             let new_indent = format!("{}│ ", indent.clone());
             let n = items.len() - 1;
             let mut all: Vec<(String, T)> = items[..n].iter().fold(vec![], |mut acc, i| {
-                let parent: (String, T) = (format!("{:width$}├─#{}", indent.clone(), i.id(), width = level), i.to_owned());
+                let printed_id = if print_ids { i.id().to_string() } else { "".to_string() };
+                let parent: (String, T) = (format!("{:width$}├─#{}", indent.clone(), printed_id, width = level), i.to_owned());
                 let mut nodes: Vec<(String, T)> = tree.get(&Some(i.id())).map(|v|
-                    print_nodes(v.to_vec(), level + 1, tree, new_indent.clone())
+                    print_nodes(v.to_vec(), level + 1, tree, new_indent.clone(), print_ids)
                 ).unwrap_or(vec![]);
                 nodes.insert(0, parent);
                 acc.append(&mut nodes);
