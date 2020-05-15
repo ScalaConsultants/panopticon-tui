@@ -260,7 +260,7 @@ impl<'a> App<'a> {
         let mut tabs: Vec<Tab> = vec![];
 
         if let Some(_) = zio_zmx_addr {
-            tabs.push(Tab { kind: TabKind::ZMX, title: "ZMX" })
+            tabs.push(Tab { kind: TabKind::ZMX, title: "ZIO" })
         }
 
         if let Some(_) = jmx {

@@ -141,7 +141,7 @@ fn main() -> Result<(), failure::Error> {
     }
 
     let mut app = App::new(
-        "ZIO-ZMX-TUI",
+        "PANOPTICON-TUI",
         cli.zio_zmx.clone(),
         cli.jmx_settings(),
         cli.akka_actor_tree_settings(),
