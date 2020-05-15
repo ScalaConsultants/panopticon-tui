@@ -268,7 +268,7 @@ impl<'a> App<'a> {
         }
 
         if let Some(_) = akka_actor_tree {
-            tabs.push(Tab { kind: TabKind::AkkaActorTree, title: "Actor Tree" })
+            tabs.push(Tab { kind: TabKind::AkkaActorTree, title: "Akka" })
         }
 
         App {
