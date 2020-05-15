@@ -4,19 +4,24 @@ use serde::Deserialize;
 use crate::akka_actor_tree::model::ActorNode;
 use std::collections::HashMap;
 
-pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorNode>, reqwest::Error> {
+pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorNode>, String> {
     get_actors_async(url, timeout)
 }
 
-pub fn get_actor_count(url: &String, timeout: u64) -> Result<u64, reqwest::Error> {
+pub fn get_actor_count(url: &String, timeout: u64) -> Result<u64, String> {
     get_actor_count_async(url, timeout)
 }
 
 #[tokio::main]
-async fn get_actors_async(url: &String, timeout: u64) -> Result<Vec<ActorNode>, reqwest::Error> {
+async fn get_actors_async(url: &String, timeout: u64) -> Result<Vec<ActorNode>, String> {
     let url = format!("{}?timeout={}", url, timeout);
-    let mut response: HashMap<String, Value> = reqwest::get(&url).await?.json().await?;
-    Ok(build_actor_tree(&mut response))
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Request to get actor tree failed with status: {}", response.status()));
+    }
+
+    let mut response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
+    Ok(build_actor_tree(&mut response_body))
 }
 
 fn build_actor_tree(json: &mut HashMap<String, Value>) -> Vec<ActorNode> {
@@ -53,8 +58,12 @@ struct CountResult {
 }
 
 #[tokio::main]
-async fn get_actor_count_async(url: &String, timeout: u64) -> Result<u64, reqwest::Error> {
+async fn get_actor_count_async(url: &String, timeout: u64) -> Result<u64, String> {
     let url = format!("{}?timeout={}", url, timeout);
-    let result: CountResult = reqwest::get(&url).await?.json().await?;
-    Ok(result.result)
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Request to get actor count failed with status {}", response.status()));
+    }
+    let body: CountResult = response.json().await.map_err(|e| e.to_string())?;
+    Ok(body.result)
 }

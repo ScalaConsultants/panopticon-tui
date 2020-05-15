@@ -1,15 +1,11 @@
+use std::collections::VecDeque;
 use std::iter::Iterator;
 
+use crate::akka_actor_tree::model::{ActorNode, AkkaActorTreeSettings};
+use crate::jmx_client::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::ui::formatter;
 use crate::ui::model::UIFiber;
-use crate::jmx_client::model::{JMXConnectionSettings, SlickMetrics, SlickConfig, HikariMetrics};
-use crate::akka_actor_tree::model::AkkaActorTreeSettings;
-use crate::akka_actor_tree;
-use crate::jmx_client::client::JMXClient;
-use jmx::MBeanClient;
-use std::collections::VecDeque;
-use crate::zio::zmx_client::{ZMXClient, NetworkZMXClient};
-use crate::zio::model::{FiberCount, FiberStatus};
+use crate::zio::model::{Fiber, FiberCount, FiberStatus};
 
 pub enum TabKind {
     ZMX,
@@ -58,20 +54,18 @@ pub struct ZMXTab {
     pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
     pub fiber_counts: VecDeque<FiberCount>,
-    pub zmx_client: Box<dyn ZMXClient>,
 }
 
 impl ZMXTab {
     pub const MAX_FIBER_COUNT_MEASURES: usize = 100;
 
-    fn new(zio_zmx_addr: String) -> ZMXTab {
+    pub fn new() -> ZMXTab {
         ZMXTab {
             fibers: ListState::new(vec![]),
             selected_fiber_dump: ("".to_string(), 1),
             fiber_dump_all: vec![],
             scroll: 0,
             fiber_counts: VecDeque::new(),
-            zmx_client: Box::new(NetworkZMXClient::new(zio_zmx_addr)),
         }
     }
 
@@ -82,37 +76,28 @@ impl ZMXTab {
         self.fiber_counts.push_back(c);
     }
 
-    fn select_prev_fiber(&mut self) {
+    pub fn select_prev_fiber(&mut self) {
         if !self.fibers.items.is_empty() {
             self.fibers.select_previous();
             self.on_fiber_change()
         }
     }
 
-    fn select_next_fiber(&mut self) {
+    pub fn select_next_fiber(&mut self) {
         if !self.fibers.items.is_empty() {
             self.fibers.select_next();
             self.on_fiber_change()
         }
     }
 
-    fn on_fiber_change(&mut self) {
+    pub fn on_fiber_change(&mut self) {
         let n = self.fibers.selected;
         self.selected_fiber_dump = ZMXTab::prepare_dump(self.fiber_dump_all[n].clone());
         self.scroll = 0;
     }
 
-    fn dump_fibers(&mut self) -> Result<(), String> {
-        let fd = self.zmx_client.dump_fibers()
-            .map_err(
-                |e| format!(
-                    "Couldn't get fiber dump from {}. Make sure zio-zmx is listening on specified port.\r\nUnderlying error: {}",
-                    self.zmx_client.address(),
-                    e
-                )
-            )?;
-
-        let list: Vec<UIFiber> = formatter::printable_tree(fd, true)
+    pub fn replace_fiber_dump(&mut self, dump: Vec<Fiber>) {
+        let list: Vec<UIFiber> = formatter::printable_tree(dump, true)
             .iter()
             .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
             .collect();
@@ -125,32 +110,23 @@ impl ZMXTab {
         self.selected_fiber_dump = ZMXTab::prepare_dump(fib_dumps[0].clone());
         self.fiber_dump_all.clear();
         self.fiber_dump_all.append(&mut fib_dumps);
-        Ok(())
     }
 
-    fn scroll_up(&mut self) {
+    pub fn scroll_up(&mut self) {
         if self.scroll > 0 {
             self.scroll -= 1;
         }
     }
 
-    fn scroll_down(&mut self) {
+    pub fn scroll_down(&mut self) {
         if self.scroll < self.selected_fiber_dump.1 {
             self.scroll += 1;
         }
     }
 
-    fn tick(&mut self) -> Result<(), String> {
-        let fd = self.zmx_client.dump_fibers()
-            .map_err(
-                |e| format!(
-                    "Couldn't get fiber dump from {}. Make sure zio-zmx is listening on specified port.\r\nUnderlying error: {}",
-                    self.zmx_client.address(),
-                    e
-                )
-            )?;
+    pub fn append_fiber_dump_for_counts(&mut self, dump: Vec<Fiber>) {
         let mut count = FiberCount { done: 0, suspended: 0, running: 0, finishing: 0 };
-        for f in fd.iter() {
+        for f in dump.iter() {
             match f.status {
                 FiberStatus::Done => { count.done += 1 }
                 FiberStatus::Finishing => { count.finishing += 1 }
@@ -159,7 +135,6 @@ impl ZMXTab {
             }
         }
         self.append_fiber_count(count);
-        Ok(())
     }
 
     fn prepare_dump(s: String) -> (String, u16) {
@@ -168,8 +143,6 @@ impl ZMXTab {
 }
 
 pub struct SlickTab {
-    pub jmx_connection_settings: JMXConnectionSettings,
-    pub jmx: JMXClient,
     pub has_hikari: bool,
     pub slick_metrics: VecDeque<SlickMetrics>,
     pub slick_config: SlickConfig,
@@ -180,52 +153,35 @@ impl SlickTab {
     pub const MAX_SLICK_MEASURES: usize = 25;
     pub const MAX_HIKARI_MEASURES: usize = 100;
 
-    fn append_slick_metrics(&mut self, m: SlickMetrics) {
+    pub fn new() -> SlickTab {
+        SlickTab {
+            has_hikari: false,
+            slick_metrics: VecDeque::new(),
+            slick_config: SlickConfig { max_threads: 0, max_queue_size: 0 },
+            hikari_metrics: VecDeque::new(),
+        }
+    }
+
+    pub fn replace_slick_config(&mut self, m: SlickConfig) {
+        self.slick_config = m
+    }
+
+    pub fn append_slick_metrics(&mut self, m: SlickMetrics) {
         if self.slick_metrics.len() > SlickTab::MAX_SLICK_MEASURES {
             self.slick_metrics.pop_front();
         }
         self.slick_metrics.push_back(m);
     }
 
-    fn append_hikari_metrics(&mut self, m: HikariMetrics) {
+    pub fn append_hikari_metrics(&mut self, m: HikariMetrics) {
         if self.hikari_metrics.len() > SlickTab::MAX_HIKARI_MEASURES {
             self.hikari_metrics.pop_front();
         }
         self.hikari_metrics.push_back(m);
     }
-
-    fn initialize(&mut self) -> Result<(), String> {
-        let cfg = self.jmx.get_slick_config().map_err(|e| SlickTab::format_error(e))?;
-        let dyn_data = self.jmx.get_slick_metrics().map_err(|e| SlickTab::format_error(e))?;
-        self.slick_config = cfg;
-        self.slick_metrics = VecDeque::from(vec![SlickMetrics::ZERO; SlickTab::MAX_SLICK_MEASURES]);
-        self.has_hikari = self.jmx.get_hikari_metrics().is_ok();
-        Ok(self.append_slick_metrics(dyn_data))
-    }
-
-    fn format_error(e: jmx::Error) -> String {
-        format!(
-            "No slick jmx metrics found. Are you sure you have registerMbeans=true in your slick config?\r\nUnderlying error: {}", e
-        )
-    }
-
-    fn tick(&mut self) -> Result<(), String> {
-        let hikari: Result<(), String> = if self.has_hikari {
-            let m = self.jmx.get_hikari_metrics().map_err(|e| SlickTab::format_error(e))?;
-            Ok(self.append_hikari_metrics(m))
-        } else {
-            Ok(())
-        };
-
-        hikari?;
-
-        let slick = self.jmx.get_slick_metrics().map_err(|e| SlickTab::format_error(e))?;
-        Ok(self.append_slick_metrics(slick))
-    }
 }
 
 pub struct AkkaActorTreeTab {
-    pub settings: AkkaActorTreeSettings,
     pub actors: ListState<String>,
     pub actor_counts: VecDeque<u64>,
 }
@@ -233,14 +189,11 @@ pub struct AkkaActorTreeTab {
 impl AkkaActorTreeTab {
     pub const MAX_ACTOR_COUNT_MEASURES: usize = 50;
 
-    fn new(settings: AkkaActorTreeSettings) -> AkkaActorTreeTab {
-        AkkaActorTreeTab { settings, actors: ListState::new(vec![]), actor_counts: VecDeque::new() }
+    pub fn new() -> AkkaActorTreeTab {
+        AkkaActorTreeTab { actors: ListState::new(vec![]), actor_counts: VecDeque::new() }
     }
 
-    fn reload_actors(&mut self) -> Result<(), String> {
-        let actors = akka_actor_tree::client::get_actors(&self.settings.tree_address, self.settings.tree_timeout)
-            .map_err(|e| format!("Error loading akka actor tree tree: {}", e))?;
-
+    pub fn update_actor_tree(&mut self, actors: Vec<ActorNode>) {
         let mut list: Vec<String> = formatter::printable_tree(actors, false)
             .iter()
             .map(|x| x.0.to_owned())
@@ -249,29 +202,21 @@ impl AkkaActorTreeTab {
         self.actors.items.clear();
         self.actors.items.append(&mut list);
         self.actors.selected = 0;
-        Ok(())
     }
 
-    fn select_prev_actor(&mut self) {
+    pub fn select_prev_actor(&mut self) {
         self.actors.select_previous();
     }
 
-    fn select_next_actor(&mut self) {
+    pub fn select_next_actor(&mut self) {
         self.actors.select_next();
     }
 
-    fn append_actor_count(&mut self, c: u64) {
+    pub fn append_actor_count(&mut self, c: u64) {
         if self.actor_counts.len() > AkkaActorTreeTab::MAX_ACTOR_COUNT_MEASURES {
             self.actor_counts.pop_front();
         }
         self.actor_counts.push_back(c);
-    }
-
-    fn tick(&mut self) -> Result<(), String> {
-        let cnt = akka_actor_tree::client::get_actor_count(&self.settings.count_address, self.settings.count_timeout)
-            .map_err(|e| format!("Error loading akka actor count: {}", e))?;
-
-        Ok(self.append_actor_count(cnt))
     }
 }
 
@@ -302,7 +247,6 @@ pub struct App<'a> {
     pub exit_reason: Option<String>,
     pub tabs: TabsState<'a>,
     pub zmx: Option<ZMXTab>,
-    pub jmx_settings: Option<JMXConnectionSettings>,
     pub slick: Option<SlickTab>,
     pub actor_tree: Option<AkkaActorTreeTab>,
 }
@@ -332,38 +276,9 @@ impl<'a> App<'a> {
             should_quit: false,
             exit_reason: None,
             tabs: TabsState::new(tabs),
-            zmx: zio_zmx_addr.map(|x| ZMXTab::new(x)),
-            jmx_settings: jmx,
-            slick: None,
-            actor_tree: akka_actor_tree.map(|s| AkkaActorTreeTab::new(s)),
-        }
-    }
-
-    pub fn initialize_connections(&mut self) -> Result<(), String> {
-        match &self.jmx_settings {
-            None => Ok(()),
-            Some(conn) => {
-                let url_str = format!(
-                    "service:jmx:rmi://{}/jndi/rmi://{}/jmxrmi",
-                    &conn.address, &conn.address
-                );
-                let url = jmx::MBeanAddress::service_url(url_str.clone());
-                let c = MBeanClient::connect(url).map_err(|e| format!(
-                    "Couldn't connect to jmx at {}. Error: {}", url_str, e
-                ))?;
-                let client = JMXClient::new(c, conn.db_pool_name.clone());
-                let mut slick_tab: SlickTab = SlickTab {
-                    jmx_connection_settings: conn.to_owned(),
-                    jmx: client,
-                    has_hikari: false,
-                    slick_metrics: VecDeque::new(),
-                    slick_config: SlickConfig { max_queue_size: 0, max_threads: 0 },
-                    hikari_metrics: VecDeque::new(),
-                };
-                slick_tab.initialize()?;
-                self.slick = Some(slick_tab);
-                Ok(())
-            }
+            zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
+            slick: jmx.map(|_| SlickTab::new()),
+            actor_tree: akka_actor_tree.map(|_| AkkaActorTreeTab::new()),
         }
     }
 
@@ -389,20 +304,6 @@ impl<'a> App<'a> {
 
     pub fn on_left(&mut self) {
         self.tabs.previous();
-    }
-
-    pub fn on_enter(&mut self) {
-        match self.tabs.current().kind {
-            TabKind::ZMX =>
-                if let Err(err) = self.zmx.as_mut().unwrap().dump_fibers() {
-                    self.quit(Some(err))
-                },
-            TabKind::Slick => {}
-            TabKind::AkkaActorTree =>
-                if let Err(err) = self.actor_tree.as_mut().unwrap().reload_actors() {
-                    self.quit(Some(err))
-                }
-        }
     }
 
     pub fn on_key(&mut self, c: char) {
@@ -432,27 +333,8 @@ impl<'a> App<'a> {
             TabKind::AkkaActorTree => {}
         }
     }
-
-    pub fn on_tick(&mut self) {
-        if let Some(t) = &mut self.zmx {
-            if let Err(err) = t.tick() {
-                self.quit(Some(err))
-            }
-        }
-        if let Some(r) = &mut self.slick {
-            if let Err(err) = r.tick() {
-                self.quit(Some(err))
-            }
-        }
-        if let Some(r) = &mut self.actor_tree {
-            if let Err(err) = r.tick() {
-                self.quit(Some(err))
-            }
-        }
-    }
 }
 
-/// TESTS
 #[cfg(test)]
 mod tests {
     use crate::ui::app::{ZMXTab, ListState};
@@ -488,17 +370,16 @@ mod tests {
             selected_fiber_dump: ("".to_string(), 0),
             fiber_dump_all: vec![],
             scroll: 0,
-            fiber_counts: VecDeque::new(),
-            zmx_client: Box::new(StubZMXClient::new(Ok(fibers))),
+            fiber_counts: VecDeque::new()
         };
 
-        tab.dump_fibers().unwrap();
+        tab.replace_fiber_dump(fibers);
 
         assert_eq!(tab.fiber_dump_all, vec!["1", "2", "4"]);
         assert_eq!(tab.fibers.items, vec![
-            "├─#1         Running",
-            "│ └─#2       Suspended",
-            "└─#4         Done"
+            "├─#1   Running",
+            "│ └─#2 Suspended",
+            "└─#4   Done"
         ]);
         assert_eq!(tab.fibers.selected, 0);
     }

@@ -12,13 +12,6 @@ pub struct SlickMetrics {
     pub queue_size: i32,
 }
 
-impl SlickMetrics {
-    pub const ZERO: SlickMetrics = SlickMetrics {
-        active_threads: 0,
-        queue_size: 0,
-    };
-}
-
 pub struct SlickConfig {
     pub max_threads: i32,
     pub max_queue_size: i32,
