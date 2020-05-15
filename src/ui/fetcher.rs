@@ -104,7 +104,7 @@ impl Fetcher {
 
     fn format_slick_error(e: jmx::Error) -> String {
         format!(
-            "No slick jmx metrics found. Are you sure you have registerMbeans=true in your slick config?\r\nUnderlying error: {}", e
+            "No Slick JMX metrics found. Are you sure you have registerMbeans=true in your Slick config?\r\nUnderlying error: {}", e
         )
     }
 }
