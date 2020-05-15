@@ -46,6 +46,20 @@ Here `db-pool-name` is a connection pool name, used to qualify JMX beans for Sli
 See [this section](https://scala-slick.org/doc/3.2.0/config.html#monitoring) of Slick docs for details about setting up your app to expose db metrics over JMX.
 
 
+### Akka metrics
+
+Panopticon can also display an entire tree of actors under some actor system. As well as monitor total amount of actors in time.
+
+To use this feature, however, you'd have to enable publication of this data in your application. There's the [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree) library, specifically suited for that purpose. Checkout it's README for the detauls on how you can set it up.
+
+Only HTTP way of transfer is supported for at the moment. To use it and see the actor data on a separate tab, launch Panopticon with following options:
+
+```
+panopticon-tui --actor-tree http://localhost:8080/actor-tree --actor-count http://localhost:8080/actor-count
+```
+
+Replace the endpoint urls with the ones you set up with [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree).
+
 ## Build from sources
 
 Development build:

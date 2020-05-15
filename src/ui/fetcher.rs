@@ -71,7 +71,7 @@ impl Fetcher {
         self.zmx_client.as_ref().unwrap().dump_fibers()
             .map_err(
                 |e| format!(
-                    "Couldn't get fiber dump from {}. Make sure zio-zmx is listening on specified port.\r\nUnderlying error: {}",
+                    "Couldn't get fiber dump from {}. Make sure zio-zmx is listening on specified port. Underlying error: {}",
                     self.zmx_client.as_ref().unwrap().address(),
                     e
                 )
