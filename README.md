@@ -23,7 +23,10 @@ Currently, Panopticon UI is using tabs. Tabs you going to see depend on what opt
 
 ### Connecting to zio-zmx server
 
-[ZIO-ZMX](https://github.com/zio/zio-zmx) is a tool for monitoring ZIO-based apps.
+[ZIO-ZMX](https://github.com/zio/zio-zmx) is a tool for monitoring ZIO-based apps. With panopticon you can see the fiber tree visualized and monitor their number:
+
+![ZIO tab demo](./assets/zio-demo.png)
+
 You can specify zio-zmx server address with `--zio-zmx` option. In this case Panopticon will connect to it and show a ZMX tab:
 ```
 panopticon-tui --zio-zmx localhost:6789
@@ -34,6 +37,8 @@ panopticon-tui --zio-zmx localhost:6789
 ### Database metrics over JMX
 
 Panopticon can show database metrics, if your app exposes them via JMX. Slick and HikariCP are the only supported options at the moment.
+
+![Slick tab demo](./assets/slick-demo.png)
 
 Slick tab will be shown in Panopticon if you specify these two options:
 
@@ -49,6 +54,8 @@ See [this section](https://scala-slick.org/doc/3.2.0/config.html#monitoring) of 
 ### Akka metrics
 
 Panopticon can also display an entire tree of actors under some actor system. As well as monitor total amount of actors in time.
+
+![Slick tab demo](./assets/akka-demo.png)
 
 To use this feature, however, you'd have to enable publication of this data in your application. There's the [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree) library, specifically suited for that purpose. Checkout it's README for the detauls on how you can set it up.
 
