@@ -187,7 +187,7 @@ pub struct AkkaActorTreeTab {
 }
 
 impl AkkaActorTreeTab {
-    pub const MAX_ACTOR_COUNT_MEASURES: usize = 50;
+    pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
 
     pub fn new() -> AkkaActorTreeTab {
         AkkaActorTreeTab { actors: ListState::new(vec![]), actor_counts: VecDeque::new() }
