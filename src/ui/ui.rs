@@ -41,7 +41,7 @@ fn draw_text<B>(f: &mut Frame<B>, area: Rect)
 {
     let text = [
         Text::raw("Contact us: "),
-        Text::styled("zio@scalac.io", Style::default().fg(Color::Blue)),
+        Text::styled("info@scalac.io", Style::default().fg(Color::Blue)),
     ];
     Paragraph::new(text.iter())
         .block(
