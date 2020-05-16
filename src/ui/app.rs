@@ -105,7 +105,10 @@ impl ZMXTab {
                 )
             )?;
 
-        let list: Vec<UIFiber> = formatter::printable_tree(fd);
+        let list: Vec<UIFiber> = formatter::printable_tree(fd)
+            .iter()
+            .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
+            .collect();
         let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
         let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
 
