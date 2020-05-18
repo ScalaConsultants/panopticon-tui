@@ -1,30 +1,35 @@
 mod ui;
 mod zio;
-mod jmx_client;
-mod akka_actor_tree;
+mod jmx;
+mod akka;
+mod app;
+mod fetcher;
+mod widgets;
+
+use std::{
+    env,
+    io::{stdout, Write},
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
+};
 
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    io::{stdout, Write},
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
-    env,
-};
 use structopt::StructOpt;
 use tui::{
-    Terminal,
     backend::CrosstermBackend,
+    Terminal,
 };
-use ui::app::App;
-use ui::fetcher::{Fetcher, FetcherRequest, FetcherResponse};
-use jmx_client::model::JMXConnectionSettings;
-use crate::akka_actor_tree::model::{AkkaActorTreeSettings};
-use crate::ui::app::TabKind;
+
+use crate::app::{App, TabKind};
+use crate::fetcher::{Fetcher, FetcherRequest, FetcherResponse};
+
+use crate::akka::model::AkkaSettings;
+use crate::jmx::model::JMXConnectionSettings;
 
 enum Event<I> {
     Input(I),
@@ -84,9 +89,9 @@ impl Cli {
         }
     }
 
-    fn akka_actor_tree_settings(&self) -> Option<AkkaActorTreeSettings> {
+    fn akka_settings(&self) -> Option<AkkaSettings> {
         match (&self.actor_tree, &self.actor_count) {
-            (Some(tree_addr), Some(count_addr)) => Some(AkkaActorTreeSettings {
+            (Some(tree_addr), Some(count_addr)) => Some(AkkaSettings {
                 tree_address: tree_addr.to_owned(),
                 tree_timeout: self.actor_tree_timeout,
                 count_address: count_addr.to_owned(),
@@ -127,7 +132,7 @@ fn main() -> Result<(), failure::Error> {
         "PANOPTICON-TUI",
         cli.zio_zmx.clone(),
         cli.jmx_settings(),
-        cli.akka_actor_tree_settings(),
+        cli.akka_settings(),
     );
 
     terminal.clear()?;
@@ -144,7 +149,7 @@ fn main() -> Result<(), failure::Error> {
 
             match Fetcher::new(cli.zio_zmx.clone(),
                                cli.jmx_settings(),
-                               cli.akka_actor_tree_settings()) {
+                               cli.akka_settings()) {
                 Err(e) => {
                     eprintln!("Responding with failure {}", e);
                     loop {
@@ -204,7 +209,7 @@ fn main() -> Result<(), failure::Error> {
     }
 
     loop {
-        ui::ui::draw(&mut terminal, &mut app)?;
+        ui::draw(&mut terminal, &mut app)?;
         match rx.recv()? {
             Event::Input(event) => match event.code {
                 KeyCode::Char('q') => {

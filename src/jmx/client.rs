@@ -1,4 +1,4 @@
-use crate::jmx_client::model::*;
+use crate::jmx::model::*;
 use jmx::{MBeanClient, MBeanClientTrait};
 use serde::de::DeserializeOwned;
 

@@ -7,12 +7,11 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols::Marker,
     Terminal,
-    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, Paragraph, List, Tabs, Text},
+    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs, Text},
 };
 
-use crate::App;
-use crate::ui::app::{SlickTab, TabKind, ZMXTab, AkkaActorTreeTab};
-use crate::jmx_client::model::HikariMetrics;
+use crate::app::{AkkaActorTreeTab, App, SlickTab, TabKind, ZMXTab};
+use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), io::Error> {

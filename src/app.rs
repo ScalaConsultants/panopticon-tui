@@ -1,12 +1,17 @@
 use std::collections::VecDeque;
 use std::iter::Iterator;
 
-use crate::akka_actor_tree::model::{ActorNode, AkkaActorTreeSettings};
-use crate::jmx_client::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
-use crate::ui::formatter;
-use crate::ui::model::UIFiber;
-use crate::zio::model::{Fiber, FiberCount, FiberStatus};
 use tui::widgets::ListState;
+
+use crate::akka::model::{ActorTreeNode, AkkaSettings};
+use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
+use crate::widgets::tree;
+use crate::zio::model::{Fiber, FiberCount, FiberStatus};
+
+pub struct UIFiber {
+    pub label: String,
+    pub dump: String,
+}
 
 #[derive(Clone)]
 pub enum TabKind {
@@ -101,7 +106,7 @@ impl ZMXTab {
     }
 
     pub fn replace_fiber_dump(&mut self, dump: Vec<Fiber>) {
-        let list: Vec<UIFiber> = formatter::printable_tree(dump, true)
+        let list: Vec<UIFiber> = tree::tree_list_widget(dump, true)
             .iter()
             .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
             .collect();
@@ -197,8 +202,8 @@ impl AkkaActorTreeTab {
         AkkaActorTreeTab { actors: StatefulList::with_items(vec![]), actor_counts: VecDeque::new() }
     }
 
-    pub fn update_actor_tree(&mut self, actors: Vec<ActorNode>) {
-        let mut list: Vec<String> = formatter::printable_tree(actors, false)
+    pub fn update_actor_tree(&mut self, actors: Vec<ActorTreeNode>) {
+        let mut list: Vec<String> = tree::tree_list_widget(actors, false)
             .iter()
             .map(|x| x.0.to_owned())
             .collect();
@@ -280,7 +285,7 @@ impl<'a> App<'a> {
         title: &'a str,
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
-        akka_actor_tree: Option<AkkaActorTreeSettings>) -> App<'a> {
+        akka: Option<AkkaSettings>) -> App<'a> {
         let mut tabs: Vec<Tab> = vec![];
 
         if let Some(_) = zio_zmx_addr {
@@ -291,7 +296,7 @@ impl<'a> App<'a> {
             tabs.push(Tab { kind: TabKind::Slick, title: "Slick" })
         }
 
-        if let Some(_) = akka_actor_tree {
+        if let Some(_) = akka {
             tabs.push(Tab { kind: TabKind::AkkaActorTree, title: "Akka" })
         }
 
@@ -302,7 +307,7 @@ impl<'a> App<'a> {
             tabs: TabsState::new(tabs),
             zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
             slick: jmx.map(|_| SlickTab::new()),
-            actor_tree: akka_actor_tree.map(|_| AkkaActorTreeTab::new()),
+            actor_tree: akka.map(|_| AkkaActorTreeTab::new()),
         }
     }
 
@@ -361,10 +366,11 @@ impl<'a> App<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::app::{ZMXTab, StatefulList};
-    use crate::zio::zmx_client::StubZMXClient;
-    use crate::zio::model::{Fiber, FiberStatus};
     use std::collections::VecDeque;
+
+    use crate::app::{StatefulList, ZMXTab};
+    use crate::zio::model::{Fiber, FiberStatus};
+    use crate::zio::zmx::StubZMXClient;
 
     #[test]
     fn zmx_tab_dumps_fibers() {
