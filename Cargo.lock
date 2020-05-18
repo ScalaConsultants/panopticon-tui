@@ -165,6 +165,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cloudabi"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -195,22 +204,25 @@ dependencies = [
 
 [[package]]
 name = "crossterm"
-version = "0.13.3"
+version = "0.17.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "759f2256ab248ad498bdd62038187450921b1b8d24c348d198f3425b0bd289cb"
+checksum = "2a880035bfe4707e344da9acf50cc94d003fe337f50afd94c8722c1bb4e0a933"
 dependencies = [
+ "bitflags",
  "crossterm_winapi",
  "lazy_static",
  "libc",
  "mio",
+ "parking_lot",
+ "signal-hook",
  "winapi 0.3.8",
 ]
 
 [[package]]
 name = "crossterm_winapi"
-version = "0.4.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02de3a35bcabb5bb6dc7d4449abb546d23f123b06f074e2cf1c50db516da6ac8"
+checksum = "057b7146d02fb50175fd7dbe5158f6097f33d02831f43b4ee8ae4ddf67b68f5c"
 dependencies = [
  "winapi 0.3.8",
 ]
@@ -441,9 +453,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.8.2"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
+checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
 dependencies = [
  "either",
 ]
@@ -531,6 +543,15 @@ checksum = "f2b111a074963af1d37a139918ac6d49ad1d0d5e47f72fd55388619691a7d753"
 dependencies = [
  "cc",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "lock_api"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4da24a77a3d8a6d4862d95f72e6fdb9c09a643ecdb402d754004a557f2bec75"
+dependencies = [
+ "scopeguard",
 ]
 
 [[package]]
@@ -676,6 +697,30 @@ dependencies = [
  "structopt",
  "tokio",
  "tui",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
+dependencies = [
+ "cfg-if",
+ "cloudabi",
+ "libc",
+ "redox_syscall",
+ "smallvec",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -838,6 +883,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed3d612bc64430efeb3f7ee6ef26d590dce0c43249217bddc62112540c7941e1"
 
 [[package]]
+name = "scopeguard"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
 name = "serde"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -866,6 +917,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ff2db2112d6c761e12522c65f7768548bd6e8cd23d2a9dae162520626629bd6"
+dependencies = [
+ "libc",
+ "mio",
+ "signal-hook-registry",
+]
+
+[[package]]
 name = "signal-hook-registry"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -880,6 +942,12 @@ name = "slab"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
+
+[[package]]
+name = "smallvec"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7cb5678e1615754284ec264d9bb5b4c27d2018577fd90ac0ceb578591ed5ee4"
 
 [[package]]
 name = "socket2"
@@ -1032,16 +1100,15 @@ dependencies = [
 
 [[package]]
 name = "tui"
-version = "0.7.0"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0606ff286997171664d4f5ace6b130dd6ba1b867e6a27433077f618807aedc3b"
+checksum = "c25eac88406f384894aa6db56ac0378c767254ee5829824ce5b0fc8fd24d5778"
 dependencies = [
  "bitflags",
  "cassowary",
  "crossterm",
  "either",
  "itertools",
- "log",
  "unicode-segmentation",
  "unicode-width",
 ]
