@@ -294,13 +294,10 @@ fn main() -> Result<(), failure::Error> {
             }
         }
         if app.should_quit {
-            if let Some(message) = app.exit_reason {
-                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                println!("{}", message);
-            }
             break;
         }
     }
-
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    app.exit_reason.map(|e| println!("{}", e));
     Ok(())
 }

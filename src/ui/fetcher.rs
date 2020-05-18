@@ -46,14 +46,11 @@ impl Fetcher {
                     &conn.address, &conn.address
                 );
                 let url = jmx::MBeanAddress::service_url(url_str.clone());
-                eprintln!("Connecting...");
-                let r = MBeanClient::connect(url)
+                MBeanClient::connect(url)
                     .map(|x| Some(JMXClient::new(x, conn.db_pool_name.clone())))
                     .map_err(|e| format!(
                         "Couldn't connect to jmx at {}. Error: {}", url_str, e
-                    ));
-                eprintln!("Connected...");
-                r
+                    ))
             }
         }?;
 
