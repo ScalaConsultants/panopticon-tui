@@ -110,7 +110,7 @@ fn main() -> Result<(), failure::Error> {
         return Ok(());
     }
 
-    let tick_rate = cli.tick_rate;
+    let tick_rate = Duration::from_millis(cli.tick_rate);
     let has_jmx = cli.jmx_settings().is_some();
 
     enable_raw_mode()?;
@@ -123,26 +123,6 @@ fn main() -> Result<(), failure::Error> {
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
 
-    // Setup input handling
-    let (tx, rx) = mpsc::channel();
-
-    let tick_rate = Duration::from_millis(cli.tick_rate);
-    thread::spawn(move || {
-        let mut last_tick = Instant::now();
-        loop {
-            // poll for tick rate duration, if no events, sent tick event.
-            if event::poll(tick_rate - last_tick.elapsed()).unwrap() {
-                if let CEvent::Key(key) = event::read().unwrap() {
-                    tx.send(Event::Input(key)).unwrap();
-                }
-            }
-            if last_tick.elapsed() >= tick_rate {
-                tx.send(Event::Tick).unwrap();
-                last_tick = Instant::now();
-            }
-        }
-    });
-
     let mut app = App::new(
         "PANOPTICON-TUI",
         cli.zio_zmx.clone(),
@@ -151,6 +131,9 @@ fn main() -> Result<(), failure::Error> {
     );
 
     terminal.clear()?;
+
+    // channel for main app event loop
+    let (tx, rx) = mpsc::channel();
 
     // Setup fetcher interaction
     let (txf, rxf) = mpsc::channel();
@@ -192,21 +175,31 @@ fn main() -> Result<(), failure::Error> {
         });
     }
 
-    {
+    // Setup input handling
+    thread::spawn(move || {
         let tx = tx.clone();
         let txf = txf.clone();
-        thread::spawn(move || {
-            if has_jmx {
-                txf.send(FetcherRequest::SlickConfig).unwrap();
-                txf.send(FetcherRequest::HikariMetrics).unwrap();
-                txf.send(FetcherRequest::SlickMetrics).unwrap();
+        let mut last_tick = Instant::now();
+
+        if has_jmx {
+            txf.send(FetcherRequest::SlickConfig).unwrap();
+            txf.send(FetcherRequest::HikariMetrics).unwrap();
+            txf.send(FetcherRequest::SlickMetrics).unwrap();
+        }
+
+        loop {
+            // poll for tick rate duration, if no events, sent tick event.
+            if event::poll(tick_rate - last_tick.elapsed()).unwrap() {
+                if let CEvent::Key(key) = event::read().unwrap() {
+                    tx.send(Event::Input(key)).unwrap();
+                }
             }
-            loop {
+            if last_tick.elapsed() >= tick_rate {
                 tx.send(Event::Tick).unwrap();
-                thread::sleep(Duration::from_millis(tick_rate));
+                last_tick = Instant::now();
             }
-        });
-    }
+        }
+    });
 
     loop {
         ui::ui::draw(&mut terminal, &mut app)?;
@@ -225,7 +218,7 @@ fn main() -> Result<(), failure::Error> {
                 KeyCode::Down => app.on_down(),
                 KeyCode::PageUp => app.on_page_up(),
                 KeyCode::PageDown => app.on_page_down(),
-                KeyEvent::Enter => {
+                KeyCode::Enter => {
                     match app.tabs.current().kind {
                         TabKind::ZMX => txf.send(FetcherRequest::FiberDump)?,
                         TabKind::Slick => {}
@@ -307,7 +300,5 @@ fn main() -> Result<(), failure::Error> {
         }
     }
 
-    &terminal.backend().alternate_screen().unwrap().to_main().unwrap();
-    app.exit_reason.map(|e| println!("{}", e));
     Ok(())
 }

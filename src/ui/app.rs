@@ -186,7 +186,7 @@ impl SlickTab {
 }
 
 pub struct AkkaActorTreeTab {
-    pub actors: ListState<String>,
+    pub actors: StatefulList<String>,
     pub actor_counts: VecDeque<u64>,
 }
 
@@ -194,7 +194,7 @@ impl AkkaActorTreeTab {
     pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
 
     pub fn new() -> AkkaActorTreeTab {
-        AkkaActorTreeTab { actors: ListState::new(vec![]), actor_counts: VecDeque::new() }
+        AkkaActorTreeTab { actors: StatefulList::with_items(vec![]), actor_counts: VecDeque::new() }
     }
 
     pub fn update_actor_tree(&mut self, actors: Vec<ActorNode>) {
@@ -205,15 +205,14 @@ impl AkkaActorTreeTab {
 
         self.actors.items.clear();
         self.actors.items.append(&mut list);
-        self.actors.selected = 0;
     }
 
     pub fn select_prev_actor(&mut self) {
-        self.actors.select_previous();
+        self.actors.previous();
     }
 
     pub fn select_next_actor(&mut self) {
-        self.actors.select_next();
+        self.actors.next();
     }
 
     pub fn append_actor_count(&mut self, c: u64) {
@@ -233,7 +232,7 @@ impl<T> StatefulList<T> {
     pub fn with_items(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
             state: ListState::default(),
-            items: items,
+            items,
         }
     }
 
@@ -395,7 +394,7 @@ mod tests {
             selected_fiber_dump: ("".to_string(), 0),
             fiber_dump_all: vec![],
             scroll: 0,
-            fiber_counts: VecDeque::new()
+            fiber_counts: VecDeque::new(),
         };
 
         tab.replace_fiber_dump(fibers);

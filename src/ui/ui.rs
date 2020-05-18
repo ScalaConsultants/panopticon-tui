@@ -35,7 +35,7 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
         match tabs.current().kind {
             TabKind::ZMX => &app.zmx.as_mut().map(|mut t| draw_zio_tab(&mut f, &mut t, chunks[1])),
             TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
-            TabKind::AkkaActorTree => &app.actor_tree.as_ref().map(|t| draw_actor_tree_tab(&mut f, t, chunks[1])),
+            TabKind::AkkaActorTree => &app.actor_tree.as_mut().map(|t| draw_actor_tree_tab(&mut f, t, chunks[1])),
         };
     })
 }
@@ -355,7 +355,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
     }
 }
 
-fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Rect)
     where B: Backend,
 {
     let chunks = Layout::default()
@@ -372,19 +372,20 @@ fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
 }
 
 
-fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Rect)
     where B: Backend,
 {
-    SelectableList::default()
+    let items = tab.actors.items.iter().map(|i| Text::raw(i));
+
+    let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
             .title("Actors (press <Enter> to reload the tree)"))
-        .items(&tab.actors.items)
-        .select(tab.actors.items.first().map(|_| tab.actors.selected))
         .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
-        .highlight_symbol(">")
-        .render(f, area);
+        .highlight_symbol(">");
+
+    f.render_stateful_widget(list, area, &mut tab.actors.state);
 }
 
 fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
@@ -393,7 +394,8 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rec
     let data: Vec<(&str, u64)> = tab.actor_counts.iter()
         .map(|x| ("", x.to_owned()))
         .collect();
-    BarChart::default()
+
+    let count_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
@@ -407,5 +409,5 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rec
                 .bg(Color::Green)
         )
         .style(Style::default().fg(Color::Green))
-        .render(f, area);
+    f.render_widget(count_bc, area);
 }
