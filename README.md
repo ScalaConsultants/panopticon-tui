@@ -1,5 +1,7 @@
 # panopticon-tui
 
+![CI](https://github.com/ScalaConsultants/panopticon-tui/workflows/Rust%20CI/badge.svg)
+
 Terminal UI diagnostic tool.
 
 Currently supports:
