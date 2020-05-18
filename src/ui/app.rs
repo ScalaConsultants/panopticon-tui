@@ -361,7 +361,7 @@ impl<'a> App<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::app::{ZMXTab, ListState};
+    use crate::ui::app::{ZMXTab, StatefulList};
     use crate::zio::zmx_client::StubZMXClient;
     use crate::zio::model::{Fiber, FiberStatus};
     use std::collections::VecDeque;
@@ -390,7 +390,7 @@ mod tests {
         let fibers = vec![fiber1, fiber2, fiber4];
 
         let mut tab = ZMXTab {
-            fibers: ListState::new(vec!["Fiber #1".to_owned()]),
+            fibers: StatefulList::with_items(vec!["Fiber #1".to_owned()]),
             selected_fiber_dump: ("".to_string(), 0),
             fiber_dump_all: vec![],
             scroll: 0,
@@ -405,6 +405,6 @@ mod tests {
             "│ └─#2 Suspended",
             "└─#4   Done"
         ]);
-        assert_eq!(tab.fibers.selected, 0);
+        assert_eq!(tab.fibers.state.selected(), Some(0));
     }
 }

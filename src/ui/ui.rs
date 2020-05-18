@@ -395,11 +395,12 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rec
         .map(|x| ("", x.to_owned()))
         .collect();
 
+    let title = format!("Running actors: {}", tab.actor_counts.back().unwrap_or(&0));
     let count_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title(format!("Running actors: {}", tab.actor_counts.back().unwrap_or(&0)).as_ref()))
+            .title(&title))
         .data(&data)
         .bar_width(3)
         .bar_gap(1)
@@ -408,6 +409,6 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rec
                 .fg(Color::Black)
                 .bg(Color::Green)
         )
-        .style(Style::default().fg(Color::Green))
+        .style(Style::default().fg(Color::Green));
     f.render_widget(count_bc, area);
 }

@@ -176,30 +176,32 @@ fn main() -> Result<(), failure::Error> {
     }
 
     // Setup input handling
-    thread::spawn(move || {
+    {
         let tx = tx.clone();
         let txf = txf.clone();
-        let mut last_tick = Instant::now();
+        thread::spawn(move || {
+            let mut last_tick = Instant::now();
 
-        if has_jmx {
-            txf.send(FetcherRequest::SlickConfig).unwrap();
-            txf.send(FetcherRequest::HikariMetrics).unwrap();
-            txf.send(FetcherRequest::SlickMetrics).unwrap();
-        }
+            if has_jmx {
+                txf.send(FetcherRequest::SlickConfig).unwrap();
+                txf.send(FetcherRequest::HikariMetrics).unwrap();
+                txf.send(FetcherRequest::SlickMetrics).unwrap();
+            }
 
-        loop {
-            // poll for tick rate duration, if no events, sent tick event.
-            if event::poll(tick_rate - last_tick.elapsed()).unwrap() {
-                if let CEvent::Key(key) = event::read().unwrap() {
-                    tx.send(Event::Input(key)).unwrap();
+            loop {
+                // poll for tick rate duration, if no events, sent tick event.
+                if event::poll(tick_rate - last_tick.elapsed()).unwrap() {
+                    if let CEvent::Key(key) = event::read().unwrap() {
+                        tx.send(Event::Input(key)).unwrap();
+                    }
+                }
+                if last_tick.elapsed() >= tick_rate {
+                    tx.send(Event::Tick).unwrap();
+                    last_tick = Instant::now();
                 }
             }
-            if last_tick.elapsed() >= tick_rate {
-                tx.send(Event::Tick).unwrap();
-                last_tick = Instant::now();
-            }
-        }
-    });
+        });
+    }
 
     loop {
         ui::ui::draw(&mut terminal, &mut app)?;
