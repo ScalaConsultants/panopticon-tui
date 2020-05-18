@@ -4,14 +4,15 @@ mod jmx_client;
 mod akka_actor_tree;
 
 use crossterm::{
-    input::{input, InputEvent, KeyEvent},
-    screen::AlternateScreen,
+    event::{self, Event as CEvent, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    io::stdout,
+    io::{stdout, Write},
     sync::mpsc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
     env,
 };
 use structopt::StructOpt;
@@ -112,33 +113,35 @@ fn main() -> Result<(), failure::Error> {
     let tick_rate = cli.tick_rate;
     let has_jmx = cli.jmx_settings().is_some();
 
-    let screen = AlternateScreen::to_alternate(true)?;
-    let backend = CrosstermBackend::with_alternate_screen(stdout(), screen)?;
+    enable_raw_mode()?;
+
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+
+    let backend = CrosstermBackend::new(stdout);
+
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
 
     // Setup input handling
     let (tx, rx) = mpsc::channel();
-    {
-        let tx = tx.clone();
-        thread::spawn(move || {
-            let input = input();
-            let mut reader = input.read_sync();
-            loop {
-                match reader.next() {
-                    Some(InputEvent::Keyboard(key)) => {
-                        if let Err(_) = tx.send(Event::Input(key.clone())) {
-                            return;
-                        }
-                        if key == KeyEvent::Char('q') {
-                            return;
-                        }
-                    }
-                    _ => {}
+
+    let tick_rate = Duration::from_millis(cli.tick_rate);
+    thread::spawn(move || {
+        let mut last_tick = Instant::now();
+        loop {
+            // poll for tick rate duration, if no events, sent tick event.
+            if event::poll(tick_rate - last_tick.elapsed()).unwrap() {
+                if let CEvent::Key(key) = event::read().unwrap() {
+                    tx.send(Event::Input(key)).unwrap();
                 }
             }
-        });
-    }
+            if last_tick.elapsed() >= tick_rate {
+                tx.send(Event::Tick).unwrap();
+                last_tick = Instant::now();
+            }
+        }
+    });
 
     let mut app = App::new(
         "PANOPTICON-TUI",
@@ -206,19 +209,22 @@ fn main() -> Result<(), failure::Error> {
     }
 
     loop {
-        if !app.should_quit {
-            ui::ui::draw(&mut terminal, &app)?;
-        }
-
+        ui::ui::draw(&mut terminal, &mut app)?;
         match rx.recv()? {
-            Event::Input(event) => match event {
-                KeyEvent::Char(c) => app.on_key(c),
-                KeyEvent::Left => app.on_left(),
-                KeyEvent::Up => app.on_up(),
-                KeyEvent::Right => app.on_right(),
-                KeyEvent::Down => app.on_down(),
-                KeyEvent::PageUp => app.on_page_up(),
-                KeyEvent::PageDown => app.on_page_down(),
+            Event::Input(event) => match event.code {
+                KeyCode::Char('q') => {
+                    disable_raw_mode()?;
+                    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                    terminal.show_cursor()?;
+                    break;
+                }
+                KeyCode::Char(c) => app.on_key(c),
+                KeyCode::Left => app.on_left(),
+                KeyCode::Up => app.on_up(),
+                KeyCode::Right => app.on_right(),
+                KeyCode::Down => app.on_down(),
+                KeyCode::PageUp => app.on_page_up(),
+                KeyCode::PageDown => app.on_page_down(),
                 KeyEvent::Enter => {
                     match app.tabs.current().kind {
                         TabKind::ZMX => txf.send(FetcherRequest::FiberDump)?,
@@ -293,6 +299,10 @@ fn main() -> Result<(), failure::Error> {
             }
         }
         if app.should_quit {
+            if let Some(message) = app.exit_reason {
+                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                println!("{}", message);
+            }
             break;
         }
     }

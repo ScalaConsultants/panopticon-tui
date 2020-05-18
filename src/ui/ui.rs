@@ -5,8 +5,9 @@ use tui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    symbols::Marker,
     Terminal,
-    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, Marker, Paragraph, SelectableList, Tabs, Text, Widget},
+    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, Paragraph, List, Tabs, Text},
 };
 
 use crate::App;
@@ -14,23 +15,25 @@ use crate::ui::app::{SlickTab, TabKind, ZMXTab, AkkaActorTreeTab};
 use crate::jmx_client::model::HikariMetrics;
 use crate::zio::model::FiberCount;
 
-pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &App) -> Result<(), io::Error> {
+pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
         let chunks = Layout::default()
             .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
             .split(f.size());
-        Tabs::default()
+        let tabs = app.tabs.to_owned();
+        let titles = tabs.titles();
+        let tabs_widget = Tabs::default()
             .block(Block::default()
                 .borders(Borders::ALL)
                 .title_style(Style::default().fg(Color::Blue).modifier(Modifier::BOLD))
                 .title(app.title))
-            .titles(&app.tabs.titles())
+            .titles(&titles)
             .style(Style::default().fg(Color::Green))
             .highlight_style(Style::default().fg(Color::Yellow))
-            .select(app.tabs.index)
-            .render(&mut f, chunks[0]);
-        match app.tabs.current().kind {
-            TabKind::ZMX => &app.zmx.as_ref().map(|t| draw_zio_tab(&mut f, t, chunks[1])),
+            .select(tabs.index);
+        f.render_widget(tabs_widget, chunks[0]);
+        match tabs.current().kind {
+            TabKind::ZMX => &app.zmx.as_mut().map(|mut t| draw_zio_tab(&mut f, &mut t, chunks[1])),
             TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
             TabKind::AkkaActorTree => &app.actor_tree.as_ref().map(|t| draw_actor_tree_tab(&mut f, t, chunks[1])),
         };
@@ -44,15 +47,15 @@ fn draw_text<B>(f: &mut Frame<B>, area: Rect)
         Text::raw("Contact us: "),
         Text::styled("info@scalac.io", Style::default().fg(Color::Blue)),
     ];
-    Paragraph::new(text.iter())
+    let p = Paragraph::new(text.iter())
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("by Scalac Sp.z o.o.")
                 .title_style(Style::default().fg(Color::Magenta).modifier(Modifier::BOLD)),
         )
-        .wrap(true)
-        .render(f, area);
+        .wrap(true);
+    f.render_widget(p, area);
 }
 
 fn draw_slick_tab<B>(f: &mut Frame<B>, slick: &SlickTab, area: Rect)
@@ -98,11 +101,12 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
         .map(|x| ("", x.active_threads as u64))
         .collect();
     let active_threads = db.slick_metrics.back().map_or(0, |x| x.active_threads);
-    BarChart::default()
+    let active_threads_title = format!("Slick active threads: {} (max: {})", active_threads, db.slick_config.max_threads);
+    let active_threads_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title(format!("Slick active threads: {} (max: {})", active_threads, db.slick_config.max_threads).as_ref()))
+            .title(&active_threads_title))
         .data(&slick_threads_barchart)
         .max(db.slick_config.max_threads as u64)
         .bar_width(3)
@@ -112,19 +116,20 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
                 .fg(Color::Black)
                 .bg(Color::Green)
         )
-        .style(Style::default().fg(Color::Green))
-        .render(f, chunks[0]);
+        .style(Style::default().fg(Color::Green));
+    f.render_widget(active_threads_bc, chunks[0]);
 
-    let slick_queue_barchart: Vec<(&str, u64)> = db.slick_metrics.iter()
+    let slick_queue_data: Vec<(&str, u64)> = db.slick_metrics.iter()
         .map(|x| ("", x.queue_size as u64))
         .collect();
     let queue_size = db.slick_metrics.back().map_or(0, |x| x.queue_size);
-    BarChart::default()
+    let queue_size_title = format!("Slick queue size: {} (max: {})", queue_size, db.slick_config.max_queue_size);
+    let slick_queue_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title(format!("Slick queue size: {} (max: {})", queue_size, db.slick_config.max_queue_size).as_ref()))
-        .data(&slick_queue_barchart)
+            .title(&queue_size_title))
+        .data(&slick_queue_data)
         .max(db.slick_config.max_queue_size as u64)
         .bar_width(3)
         .bar_gap(1)
@@ -133,8 +138,8 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
                 .fg(Color::Black)
                 .bg(Color::Blue)
         )
-        .style(Style::default().fg(Color::Blue))
-        .render(f, chunks[1]);
+        .style(Style::default().fg(Color::Blue));
+    f.render_widget(slick_queue_bc, chunks[1]);
 }
 
 fn hikari_chart<F>(db: &SlickTab, f: F) -> Vec<(f64, f64)>
@@ -181,16 +186,18 @@ fn draw_hikari_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     let waiting_connections = db.hikari_metrics.back().map_or(0, |x| x.waiting);
     let idle_connections = db.hikari_metrics.back().map_or(0, |x| x.idle);
 
-    Chart::default()
+    let title = format!(
+        "HikariCP (total={}, active={}, idle={}, waiting={})",
+        total_connections,
+        active_connections,
+        idle_connections,
+        waiting_connections
+    );
+    let label = &["0".to_owned(), ((max_connections as f64) / 2.0).to_string(), max_connections.to_string()];
+    let c = Chart::default()
         .block(
             Block::default()
-                .title(&format!(
-                    "HikariCP (total={}, active={}, idle={}, waiting={})",
-                    total_connections,
-                    active_connections,
-                    idle_connections,
-                    waiting_connections
-                ))
+                .title(&title)
                 .title_style(Style::default().fg(Color::Cyan))
                 .borders(Borders::ALL)
         )
@@ -206,14 +213,14 @@ fn draw_hikari_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
                 .style(Style::default().fg(Color::Gray))
                 .labels_style(Style::default().modifier(Modifier::ITALIC))
                 .bounds([-1.0, (max_connections + 1) as f64])
-                .labels(&["0".to_owned(), ((max_connections as f64) / 2.0).to_string(), max_connections.to_string()])
+                .labels(label)
         )
-        .datasets(&datasets)
-        .render(f, area);
+        .datasets(&datasets);
+    f.render_widget(c, area);
 }
 
 
-fn draw_zio_tab<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
+fn draw_zio_tab<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
     where B: Backend,
 {
     let chunks = Layout::default()
@@ -230,7 +237,7 @@ fn fiber_count_chart<F>(db: &ZMXTab, f: F) -> Vec<(f64, f64)>
         .collect()
 }
 
-fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
+fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
     where B: Backend,
 {
     let constraints = vec![Constraint::Percentage(100)];
@@ -252,16 +259,16 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                     .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                     .split(chunks[0]);
 
-                SelectableList::default()
+                let items = zmx.fibers.items.iter().map(|i| Text::raw(i));
+
+                let list = List::new(items)
                     .block(Block::default()
                         .borders(Borders::ALL)
                         .title_style(Style::default().fg(Color::Cyan))
                         .title("Fibers (press <Enter> to take a snapshot)"))
-                    .items(&zmx.fibers.items)
-                    .select(zmx.fibers.items.first().map(|_| zmx.fibers.selected))
                     .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
-                    .highlight_symbol(">")
-                    .render(f, chunks[0]);
+                    .highlight_symbol(">");
+                f.render_stateful_widget(list, chunks[0], &mut zmx.fibers.state);
 
                 let running_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.running);
                 let done_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.done);
@@ -298,17 +305,19 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                 let finishing_fibers = zmx.fiber_counts.back().map_or(0, |x| x.finishing);
                 let suspended_fibers = zmx.fiber_counts.back().map_or(0, |x| x.suspended);
 
-                Chart::default()
+                let title = format!(
+                    "Fibers (total={}, running={}, done={}, finishing={}, suspended={})",
+                    total_fibers,
+                    running_fibers,
+                    done_fibers,
+                    finishing_fibers,
+                    suspended_fibers
+                );
+                let label = &["0".to_owned(), ((max_fibers as f64) / 2.0).to_string(), max_fibers.to_string()];
+                let c = Chart::default()
                     .block(
                         Block::default()
-                            .title(&format!(
-                                "Fibers (total={}, running={}, done={}, finishing={}, suspended={})",
-                                total_fibers,
-                                running_fibers,
-                                done_fibers,
-                                finishing_fibers,
-                                suspended_fibers
-                            ))
+                            .title(&title)
                             .title_style(Style::default().fg(Color::Cyan))
                             .borders(Borders::ALL)
                     )
@@ -324,15 +333,15 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                             .style(Style::default().fg(Color::Gray))
                             .labels_style(Style::default().modifier(Modifier::ITALIC))
                             .bounds([-1.0, (max_fibers + 1) as f64])
-                            .labels(&["0".to_owned(), ((max_fibers as f64) / 2.0).to_string(), max_fibers.to_string()])
+                            .labels(label)
                     )
-                    .datasets(&datasets)
-                    .render(f, chunks[1]);
+                    .datasets(&datasets);
+                f.render_widget(c, chunks[1]);
             }
 
             let text = [Text::raw(zmx.selected_fiber_dump.0.to_owned())];
 
-            Paragraph::new(text.iter())
+            let p = Paragraph::new(text.iter())
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
@@ -340,8 +349,8 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &ZMXTab, area: Rect)
                         .title_style(Style::default().fg(Color::Cyan)),
                 )
                 .wrap(true)
-                .scroll(zmx.scroll)
-                .render(f, chunks[1]);
+                .scroll(zmx.scroll);
+            f.render_widget(p, chunks[1]);
         }
     }
 }

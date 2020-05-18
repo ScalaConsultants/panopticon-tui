@@ -6,18 +6,22 @@ use crate::jmx_client::model::{HikariMetrics, JMXConnectionSettings, SlickConfig
 use crate::ui::formatter;
 use crate::ui::model::UIFiber;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
+use tui::widgets::ListState;
 
+#[derive(Clone)]
 pub enum TabKind {
     ZMX,
     Slick,
     AkkaActorTree,
 }
 
+#[derive(Clone)]
 pub struct Tab<'a> {
     pub kind: TabKind,
     pub title: &'a str,
 }
 
+#[derive(Clone)]
 pub struct TabsState<'a> {
     pub tabs: Vec<Tab<'a>>,
     pub index: usize,
@@ -49,7 +53,7 @@ impl<'a> TabsState<'a> {
 }
 
 pub struct ZMXTab {
-    pub fibers: ListState<String>,
+    pub fibers: StatefulList<String>,
     pub selected_fiber_dump: (String, u16),
     pub fiber_dump_all: Vec<String>,
     pub scroll: u16,
@@ -61,7 +65,7 @@ impl ZMXTab {
 
     pub fn new() -> ZMXTab {
         ZMXTab {
-            fibers: ListState::new(vec![]),
+            fibers: StatefulList::with_items(vec![]),
             selected_fiber_dump: ("".to_string(), 1),
             fiber_dump_all: vec![],
             scroll: 0,
@@ -78,20 +82,20 @@ impl ZMXTab {
 
     pub fn select_prev_fiber(&mut self) {
         if !self.fibers.items.is_empty() {
-            self.fibers.select_previous();
+            self.fibers.previous();
             self.on_fiber_change()
         }
     }
 
     pub fn select_next_fiber(&mut self) {
         if !self.fibers.items.is_empty() {
-            self.fibers.select_next();
+            self.fibers.next();
             self.on_fiber_change()
         }
     }
 
     pub fn on_fiber_change(&mut self) {
-        let n = self.fibers.selected;
+        let n = self.fibers.state.selected().unwrap_or(0);
         self.selected_fiber_dump = ZMXTab::prepare_dump(self.fiber_dump_all[n].clone());
         self.scroll = 0;
     }
@@ -101,12 +105,12 @@ impl ZMXTab {
             .iter()
             .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
             .collect();
-        let mut fib_labels = list.iter().map(|f| f.label.clone()).collect();
+        let mut fib_labels: Vec<String> = list.iter().map(|f| f.label.clone()).collect();
         let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
 
         self.fibers.items.clear();
         self.fibers.items.append(&mut fib_labels);
-        self.fibers.selected = 0;
+        self.fibers.state.select(Some(0));
         self.selected_fiber_dump = ZMXTab::prepare_dump(fib_dumps[0].clone());
         self.fiber_dump_all.clear();
         self.fiber_dump_all.append(&mut fib_dumps);
@@ -220,24 +224,45 @@ impl AkkaActorTreeTab {
     }
 }
 
-pub struct ListState<I> {
-    pub items: Vec<I>,
-    pub selected: usize,
+pub struct StatefulList<T> {
+    pub state: ListState,
+    pub items: Vec<T>,
 }
 
-impl<I> ListState<I> {
-    fn new(items: Vec<I>) -> ListState<I> {
-        ListState { items, selected: 0 }
-    }
-    fn select_previous(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
+impl<T> StatefulList<T> {
+    pub fn with_items(items: Vec<T>) -> StatefulList<T> {
+        StatefulList {
+            state: ListState::default(),
+            items: items,
         }
     }
-    fn select_next(&mut self) {
-        if !self.items.is_empty() && self.selected < self.items.len() - 1 {
-            self.selected += 1
-        }
+
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.items.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.items.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
     }
 }
 
