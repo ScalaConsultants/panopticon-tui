@@ -1,0 +1,17 @@
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [0.1.0] - 2020-05-19
+### Added
+- ZIO-ZMX integration
+- Slick and HikariCP metrics
+- Akka metrics integration (via [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree))
+
+### Changed
+- close application shortcut is now the standard `ctrl+c`
+- some diff improvements ([#42](https://github.com/extrawurst/gitui/issues/42))
+
+### Fixed
+- document tab key to switch tabs ([#48](https://github.com/extrawurst/gitui/issues/48))
