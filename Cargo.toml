@@ -7,7 +7,7 @@ description = "Terminal UI diagnostic tool for Scala apps"
 readme = "README.md"
 homepage = "https://github.com/ScalaConsultants/panopticon-tui/"
 repository = "https://github.com/ScalaConsultants/panopticon-tui/"
-keywords = ["cli", "scala", "zio", "metrics", "monitoring", "akka"]
+keywords = ["scala", "metrics", "monitoring"]
 categories = ["command-line-utilities"]
 edition = "2018"
 
