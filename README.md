@@ -11,6 +11,8 @@ Currently supports:
 
 ## Usage
 
+To get a binary for your OS check [releases](https://github.com/ScalaConsultants/panopticon-tui/releases) page.
+
 Panopticon is published to [crates.id](https://crates.io/), so if you have rust toolchain installed, you can run `cargo install panopticon-tui` and it will build the executable for you.
 
 You can also build it from sources:
