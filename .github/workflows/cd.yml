@@ -24,12 +24,11 @@ jobs:
           java-version: 1.8
       - name: Build
         run: cargo build
-      - name: Run tests
-        if: matrix.os != 'macos-latest'
-        run: cargo test
-      - name: Run tests MacOs
+      - name: Prepare libjvm.dylib for MacOS
         if: matrix.os == 'macos-latest'
-        run: sudo ln -s $(/usr/libexec/java_home)/lib/server/libjvm.dylib /usr/local/lib && cargo test
+        run: sudo ln -s $(/usr/libexec/java_home)/lib/server/libjvm.dylib /usr/local/lib
+      - name: Run tests
+        run: cargo test
       - name: Setup MUSL
         if: matrix.os == 'ubuntu-latest'
         run: |
