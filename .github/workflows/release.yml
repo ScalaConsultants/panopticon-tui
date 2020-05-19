@@ -30,9 +30,9 @@ jobs:
       - name: Run tests
         if: matrix.os != 'macos-latest'
         run: cargo test
-      - name: Run tests MacOs
-        if: matrix.os == 'macos-latest'
-        run: cargo test
+#      - name: Run tests MacOs
+#        if: matrix.os == 'macos-latest'
+#        run: sudo ln -s $(/usr/libexec/java_home)/jre/lib/server/libjvm.dylib /usr/local/lib && cargo test
       - name: Setup MUSL
         if: matrix.os == 'ubuntu-latest'
         run: |
