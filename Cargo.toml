@@ -1,16 +1,20 @@
 [package]
 name = "panopticon-tui"
 version = "0.1.0"
-authors = ["jczuchnowski <jakub.czuchnowski@gmail.com>"]
+authors = ["jczuchnowski <jakub.czuchnowski@gmail.com>", "vpavkin <vpavkin@gmail.com>"]
+license = "GPL-3.0"
+description = "Terminal UI diagnostic tool for Scala apps"
+readme = "README.md"
+homepage = "https://github.com/ScalaConsultants/panopticon-tui/"
+repository = "https://github.com/ScalaConsultants/panopticon-tui/"
+keywords = ["cli", "scala", "zio", "metrics", "monitoring", "akka"]
+categories = ["command-line-utilities"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 crossterm = "0.17"
 tui = { version = "0.9.4", default-features = false, features = ['crossterm'] }
 failure = "0.1"
-
 bytes = "0.4"
 redis-protocol = "1.0.0"
 futures = "0.3.4"
