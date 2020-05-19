@@ -1,10 +1,11 @@
 use jmx::MBeanClient;
-use crate::akka_actor_tree;
-use crate::akka_actor_tree::model::{ActorNode, AkkaActorTreeSettings};
-use crate::jmx_client::client::JMXClient;
-use crate::jmx_client::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
+
+use crate::akka;
+use crate::akka::model::{ActorTreeNode, AkkaSettings};
+use crate::jmx::client::JMXClient;
+use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::zio::model::Fiber;
-use crate::zio::zmx_client::{NetworkZMXClient, ZMXClient};
+use crate::zio::zmx::{NetworkZMXClient, ZMXClient};
 
 pub enum FetcherRequest {
     FiberDump,
@@ -22,7 +23,7 @@ pub enum FetcherResponse {
     HikariMetrics(Result<HikariMetrics, String>),
     SlickMetrics(Result<SlickMetrics, String>),
     SlickConfig(Result<SlickConfig, String>),
-    ActorTree(Result<Vec<ActorNode>, String>),
+    ActorTree(Result<Vec<ActorTreeNode>, String>),
     ActorCount(Result<u64, String>),
     FatalFailure(String),
 }
@@ -30,14 +31,14 @@ pub enum FetcherResponse {
 pub struct Fetcher {
     pub zmx_client: Option<Box<dyn ZMXClient>>,
     pub jmx: Option<JMXClient>,
-    pub actor_tree_settings: Option<AkkaActorTreeSettings>,
+    pub akka_settings: Option<AkkaSettings>,
 }
 
 impl Fetcher {
     pub fn new(
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
-        akka_actor_tree: Option<AkkaActorTreeSettings>) -> Result<Fetcher, String> {
+        akka: Option<AkkaSettings>) -> Result<Fetcher, String> {
         let jmx_client: Option<JMXClient> = match jmx {
             None => Ok(None),
             Some(conn) => {
@@ -60,7 +61,7 @@ impl Fetcher {
                 a
             }),
             jmx: jmx_client,
-            actor_tree_settings: akka_actor_tree,
+            akka_settings: akka,
         })
     }
 
@@ -87,15 +88,15 @@ impl Fetcher {
         self.jmx.as_ref().unwrap().get_slick_config().map_err(|e| Fetcher::format_slick_error(e))
     }
 
-    pub fn get_actor_tree(&self) -> Result<Vec<ActorNode>, String> {
-        let s = self.actor_tree_settings.as_ref().unwrap();
-        akka_actor_tree::client::get_actors(&s.tree_address, s.tree_timeout)
+    pub fn get_actor_tree(&self) -> Result<Vec<ActorTreeNode>, String> {
+        let s = self.akka_settings.as_ref().unwrap();
+        akka::client::get_actors(&s.tree_address, s.tree_timeout)
             .map_err(|e| format!("Error loading akka actor tree tree: {}", e))
     }
 
     pub fn get_actor_count(&self) -> Result<u64, String> {
-        let s = self.actor_tree_settings.as_ref().unwrap();
-        akka_actor_tree::client::get_actor_count(&s.count_address, s.count_timeout)
+        let s = self.akka_settings.as_ref().unwrap();
+        akka::client::get_actor_count(&s.count_address, s.count_timeout)
             .map_err(|e| format!("Error loading akka actor count: {}", e))
     }
 

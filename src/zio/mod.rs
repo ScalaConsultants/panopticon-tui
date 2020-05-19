@@ -1,4 +1,4 @@
 pub mod model;
-pub mod zmx_client;
+pub mod zmx;
 mod dump_parser;
 mod tests;
