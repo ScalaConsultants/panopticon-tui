@@ -7,6 +7,7 @@ Terminal UI diagnostic tool.
 Currently supports:
 - [ZIO-ZMX](https://github.com/zio/zio-zmx)
 - [Slick + HikariCP](https://scala-slick.org/doc/3.2.0/config.html#monitoring) (over JMX)
+- Akka actor metrics (via [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree))
 
 ## Usage
 
