@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter, Result};
-use crate::ui::formatter::TreeWidgetNode;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Fiber {
@@ -12,20 +11,6 @@ pub struct Fiber {
 impl Display for Fiber {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{} {:?} {}", self.id, self.parent_id, self.status)
-    }
-}
-
-impl TreeWidgetNode for Fiber {
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn parent_id(&self) -> Option<usize> {
-        self.parent_id
-    }
-
-    fn label(&self) -> String {
-        format!("{:?}", self.status)
     }
 }
 
