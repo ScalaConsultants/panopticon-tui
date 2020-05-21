@@ -7,7 +7,7 @@ Terminal UI diagnostic tool.
 Currently supports:
 - [ZIO-ZMX](https://github.com/zio/zio-zmx)
 - [Slick + HikariCP](https://scala-slick.org/doc/3.2.0/config.html#monitoring) (over JMX)
-- Akka actor metrics (via [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree))
+- Akka actor metrics (via [akka-periscope](https://github.com/ScalaConsultants/akka-periscope))
 
 ## Usage
 
@@ -60,7 +60,7 @@ Panopticon can also display an entire tree of actors under some actor system. As
 
 ![Slick tab demo](./assets/akka-demo.png)
 
-To use this feature, however, you'd have to enable publication of this data in your application. There's the [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree) library, specifically suited for that purpose. Checkout it's README for the detauls on how you can set it up.
+To use this feature, however, you'd have to enable publication of this data in your application. There's the [akka-periscope](https://github.com/ScalaConsultants/akka-periscope) library, specifically suited for that purpose. Checkout it's README for the detauls on how you can set it up.
 
 Only HTTP way of transfer is supported for at the moment. To use it and see the actor data on a separate tab, launch Panopticon with following options:
 
@@ -68,7 +68,7 @@ Only HTTP way of transfer is supported for at the moment. To use it and see the 
 panopticon-tui --actor-tree http://localhost:8080/actor-tree --actor-count http://localhost:8080/actor-count
 ```
 
-Replace the endpoint urls with the ones you set up with [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree).
+Replace the endpoint urls with the ones you set up with [akka-periscope](https://github.com/ScalaConsultants/akka-periscope).
 
 ## Build from sources
 
