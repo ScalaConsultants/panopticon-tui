@@ -1,6 +1,7 @@
 # panopticon-tui
 
 ![CI](https://github.com/ScalaConsultants/panopticon-tui/workflows/Rust%20CI/badge.svg)
+![crates.io](https://img.shields.io/crates/v/panopticon-tui.svg)
 
 Terminal UI diagnostic tool.
 
