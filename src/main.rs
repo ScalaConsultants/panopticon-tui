@@ -108,7 +108,7 @@ fn main() -> Result<(), failure::Error> {
     // disable jmx crate logging
     env::set_var("J4RS_CONSOLE_LOG_LEVEL", "disabled");
 
-    if cli.zio_zmx.is_none() && cli.jmx_settings().is_none() {
+    if cli.zio_zmx.is_none() && cli.jmx_settings().is_none() && cli.akka_settings().is_none() {
         let mut clap = Cli::clap();
         println!("Nothing to monitor. Please check the following help message.\n");
         clap.print_long_help().expect("Failed printing help message");
