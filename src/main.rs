@@ -43,7 +43,7 @@ enum Event<I> {
 ///
 /// - jmx + db-pool-name
 ///
-/// - actor-tree
+/// - actor-tree + actor-count
 #[derive(Debug, StructOpt)]
 struct Cli {
     /// Frequency (in ms) to use for fetching metrics.
