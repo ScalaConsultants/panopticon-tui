@@ -1,6 +1,6 @@
 [package]
 name = "panopticon-tui"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["jczuchnowski <jakub.czuchnowski@gmail.com>", "vpavkin <vpavkin@gmail.com>"]
 license = "GPL-3.0"
 description = "Terminal UI diagnostic tool for Scala apps"
