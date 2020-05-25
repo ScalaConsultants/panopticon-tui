@@ -9,4 +9,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - ZIO-ZMX integration
 - Slick and HikariCP metrics
-- Akka metrics integration (via [akka-actor-tree](https://github.com/ScalaConsultants/akka-actor-tree))
+- Akka metrics integration (via [akka-periscope](https://github.com/ScalaConsultants/akka-periscope))
