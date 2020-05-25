@@ -12,6 +12,12 @@ Currently supports:
 
 ## Usage
 
+### Prerequisites
+
+You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.0/jmx/) crate.
+
+### Running Panopticon
+
 To get a binary for your OS check [releases](https://github.com/ScalaConsultants/panopticon-tui/releases) page.
 
 Panopticon is published to [crates.id](https://crates.io/), so if you have rust toolchain installed, you can run `cargo install panopticon-tui` and it will build the executable for you.
@@ -27,7 +33,25 @@ To get a detailed help message, run:
 panopticon-tui --help
 ```
 
-Currently, Panopticon UI is using tabs. Tabs you going to see depend on what options you use to launch Panopticon (see further).
+### ⚠️ MacOS and libjvm.dylib
+
+On MacOS you can face an error like this:
+```
+dyld: Library not loaded: @rpath/libjvm.dylib
+  Referenced from: panopticon-tui
+  Reason: image not found
+```
+
+It means that [j4rs](https://docs.rs/j4rs), which is used for JMX integration wasn't able to locate your java installation.
+
+To fix that, just create a symlink to `libjvm.dylib` (this works for JDK 11 and MacOS 10.15.4):
+
+```
+sudo ln -s $(/usr/libexec/java_home)/lib/server/libjvm.dylib /usr/local/lib
+```
+
+Depending on your MacOS version or java package, location may differ, so make sure to check the symlink is valid.
+
 
 ### Connecting to zio-zmx server
 
