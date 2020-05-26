@@ -58,6 +58,16 @@ Here `db-pool-name` is a connection pool name, used to qualify JMX beans for Sli
 
 See [this section](https://scala-slick.org/doc/3.2.0/config.html#monitoring) of Slick docs for details about setting up your app to expose db metrics over JMX.
 
+Also keep in mind that you need to specify some JVM parameters on startup so that your app exposes JMX metrics. Something along the following lines:
+
+```
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=9010
+-Dcom.sun.management.jmxremote.rmi.port=9010
+-Dcom.sun.management.jmxremote.local.only=false
+-Dcom.sun.management.jmxremote.authenticate=false
+-Dcom.sun.management.jmxremote.ssl=false
+```
 
 ### Akka metrics
 
