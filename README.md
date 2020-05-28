@@ -14,7 +14,11 @@ Currently supports:
 
 ### Prerequisites
 
-You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.0/jmx/) crate.
+You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.0/jmx/) crate).
+
+### Example
+
+There's a complete example of adjusting a real project to work with panopticon. [Check it out](https://github.com/ScalaConsultants/panopticon-example) to see how it's done.
 
 ### Running Panopticon
 
