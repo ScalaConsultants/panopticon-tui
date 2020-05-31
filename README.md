@@ -3,7 +3,7 @@
 ![CI](https://github.com/ScalaConsultants/panopticon-tui/workflows/Rust%20CI/badge.svg)
 ![crates.io](https://img.shields.io/crates/v/panopticon-tui.svg)
 
-Terminal UI diagnostic tool.
+Terminal UI observability and diagnostic tool for Scala applications.
 
 Currently supports:
 - [ZIO-ZMX](https://github.com/zio/zio-zmx)
