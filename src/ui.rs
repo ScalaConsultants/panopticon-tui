@@ -42,15 +42,12 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
 fn draw_text<B>(f: &mut Frame<B>, area: Rect)
     where B: Backend,
 {
-    let text = [
-        Text::raw("Contact us: "),
-        Text::styled("info@scalac.io", Style::default().fg(Color::Blue)),
-    ];
+    let text = [];
     let p = Paragraph::new(text.iter())
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("by Scalac Sp.z o.o.")
+                .title("by Scalac")
                 .title_style(Style::default().fg(Color::Magenta).modifier(Modifier::BOLD)),
         )
         .wrap(true);
