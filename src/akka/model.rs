@@ -1,6 +1,7 @@
 extern crate chrono;
 
 use chrono::prelude::*;
+use serde::Deserialize;
 
 #[derive(Clone)]
 pub struct AkkaSettings {
@@ -11,8 +12,6 @@ pub struct AkkaSettings {
     pub count_timeout: u64,
     pub dead_letters_window: u64,
 }
-
-use serde::Deserialize;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ActorTreeNode {
