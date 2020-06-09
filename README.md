@@ -3,7 +3,7 @@
 ![CI](https://github.com/ScalaConsultants/panopticon-tui/workflows/Rust%20CI/badge.svg)
 ![crates.io](https://img.shields.io/crates/v/panopticon-tui.svg)
 
-Terminal UI diagnostic tool.
+Terminal UI observability and diagnostic tool for Scala applications.
 
 Currently supports:
 - [ZIO-ZMX](https://github.com/zio/zio-zmx)
@@ -11,6 +11,16 @@ Currently supports:
 - Akka actor metrics (via [akka-periscope](https://github.com/ScalaConsultants/akka-periscope))
 
 ## Usage
+
+### Prerequisites
+
+You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.0/jmx/) crate).
+
+### Example
+
+There's a complete example of adjusting a real project to work with panopticon. [Check it out](https://github.com/ScalaConsultants/panopticon-example) to see how it's done.
+
+### Running Panopticon
 
 To get a binary for your OS check [releases](https://github.com/ScalaConsultants/panopticon-tui/releases) page.
 
@@ -27,7 +37,25 @@ To get a detailed help message, run:
 panopticon-tui --help
 ```
 
-Currently, Panopticon UI is using tabs. Tabs you going to see depend on what options you use to launch Panopticon (see further).
+### ⚠️ MacOS and libjvm.dylib
+
+On MacOS you can face an error like this:
+```
+dyld: Library not loaded: @rpath/libjvm.dylib
+  Referenced from: panopticon-tui
+  Reason: image not found
+```
+
+It means that [j4rs](https://docs.rs/j4rs), which is used for JMX integration wasn't able to locate your java installation.
+
+To fix that, just create a symlink to `libjvm.dylib` (this works for JDK 11 and MacOS 10.15.4):
+
+```
+sudo ln -s $(/usr/libexec/java_home)/lib/server/libjvm.dylib /usr/local/lib
+```
+
+Depending on your MacOS version or java package, location may differ, so make sure to check the symlink is valid.
+
 
 ### Connecting to zio-zmx server
 
