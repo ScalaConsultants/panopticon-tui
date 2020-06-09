@@ -1,7 +1,7 @@
 use reqwest;
 use serde_json::Value;
 use serde::Deserialize;
-use crate::akka::model::ActorTreeNode;
+use crate::akka::model::*;
 use std::collections::HashMap;
 
 pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorTreeNode>, String> {
@@ -10,6 +10,22 @@ pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorTreeNode>, Stri
 
 pub fn get_actor_count(url: &String, timeout: u64) -> Result<u64, String> {
     get_actor_count_async(url, timeout)
+}
+
+pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+    get_deadletters_async(url, window)
+}
+
+#[tokio::main]
+async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+    let url = format!("{}?window={}", url, window);
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Request to get actor tree failed with status: {}", response.status()));
+    }
+
+    let metrics: DeadLettersMetrics = response.json().await.map_err(|e| e.to_string())?;
+    Ok((metrics.snapshot, metrics.window))
 }
 
 #[tokio::main]

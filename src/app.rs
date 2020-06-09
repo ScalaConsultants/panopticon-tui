@@ -3,7 +3,7 @@ use std::iter::Iterator;
 
 use tui::widgets::ListState;
 
-use crate::akka::model::{ActorTreeNode, AkkaSettings};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage};
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
@@ -14,26 +14,26 @@ pub struct UIFiber {
 }
 
 #[derive(Clone)]
-pub enum TabKind {
+pub enum AppTabKind {
     ZMX,
     Slick,
-    AkkaActorTree,
+    Akka,
 }
 
 #[derive(Clone)]
-pub struct Tab<'a> {
-    pub kind: TabKind,
-    pub title: &'a str,
+pub struct Tab<K> {
+    pub kind: K,
+    pub title: String,
 }
 
 #[derive(Clone)]
-pub struct TabsState<'a> {
-    pub tabs: Vec<Tab<'a>>,
+pub struct TabsState<K> {
+    pub tabs: Vec<Tab<K>>,
     pub index: usize,
 }
 
-impl<'a> TabsState<'a> {
-    pub fn new(tabs: Vec<Tab<'a>>) -> TabsState {
+impl<K> TabsState<K> {
+    pub fn new(tabs: Vec<Tab<K>>) -> TabsState<K> {
         TabsState { tabs, index: 0 }
     }
     pub fn next(&mut self) {
@@ -48,12 +48,12 @@ impl<'a> TabsState<'a> {
         }
     }
 
-    pub fn current(&self) -> &Tab<'a> {
+    pub fn current(&self) -> &Tab<K> {
         &self.tabs[self.index]
     }
 
-    pub fn titles(&self) -> Vec<&'a str> {
-        self.tabs.iter().map(|x| x.title).collect()
+    pub fn titles(&self) -> Vec<&String> {
+        self.tabs.iter().map(|x| &x.title).collect()
     }
 }
 
@@ -190,16 +190,46 @@ impl SlickTab {
     }
 }
 
-pub struct AkkaActorTreeTab {
-    pub actors: StatefulList<String>,
-    pub actor_counts: VecDeque<u64>,
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum DeadLettersTabKind {
+    DeadLetters,
+    Unhandled,
+    Dropped,
 }
 
-impl AkkaActorTreeTab {
-    pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
+pub struct AkkaTab {
+    pub actors: StatefulList<String>,
+    pub actor_counts: VecDeque<u64>,
+    pub dead_letters_messages: DeadLettersSnapshot,
+    pub dead_letters_windows: VecDeque<DeadLettersWindow>,
+    pub dead_letters_tabs: TabsState<DeadLettersTabKind>,
+    pub dead_letters_log: StatefulList<DeadLettersUIMessage>,
+}
 
-    pub fn new() -> AkkaActorTreeTab {
-        AkkaActorTreeTab { actors: StatefulList::with_items(vec![]), actor_counts: VecDeque::new() }
+impl AkkaTab {
+    pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
+    pub const MAX_DEAD_LETTERS_WINDOW_MEASURES: usize = 100;
+
+    pub fn new() -> AkkaTab {
+        AkkaTab {
+            actors: StatefulList::with_items(vec![]),
+            actor_counts: VecDeque::new(),
+            dead_letters_messages: DeadLettersSnapshot {
+                dead_letters: vec![],
+                unhandled: vec![],
+                dropped: vec![],
+            },
+            dead_letters_windows: VecDeque::new(),
+            dead_letters_tabs: TabsState {
+                tabs: vec![
+                    Tab { kind: DeadLettersTabKind::DeadLetters, title: "Dead Letters".to_owned() },
+                    Tab { kind: DeadLettersTabKind::Unhandled, title: "Unhandled".to_owned() },
+                    Tab { kind: DeadLettersTabKind::Dropped, title: "Dropped".to_owned() },
+                ],
+                index: 0,
+            },
+            dead_letters_log: StatefulList::with_items(vec![]),
+        }
     }
 
     pub fn update_actor_tree(&mut self, actors: Vec<ActorTreeNode>) {
@@ -221,10 +251,31 @@ impl AkkaActorTreeTab {
     }
 
     pub fn append_actor_count(&mut self, c: u64) {
-        if self.actor_counts.len() > AkkaActorTreeTab::MAX_ACTOR_COUNT_MEASURES {
+        if self.actor_counts.len() > AkkaTab::MAX_ACTOR_COUNT_MEASURES {
             self.actor_counts.pop_front();
         }
         self.actor_counts.push_back(c);
+    }
+
+    pub fn append_dead_letters(&mut self, snapshot: DeadLettersSnapshot, window: DeadLettersWindow) {
+        if self.dead_letters_windows.len() > AkkaTab::MAX_DEAD_LETTERS_WINDOW_MEASURES {
+            self.dead_letters_windows.pop_front();
+        }
+        self.dead_letters_windows.push_back(window);
+        self.dead_letters_messages = snapshot;
+    }
+
+    pub fn reload_dead_letters_log(&mut self) {
+        let ui_messages: Vec<DeadLettersUIMessage> = match self.dead_letters_tabs.current().kind {
+            DeadLettersTabKind::DeadLetters =>
+                self.dead_letters_messages.dead_letters.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+            DeadLettersTabKind::Unhandled =>
+                self.dead_letters_messages.unhandled.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+            DeadLettersTabKind::Dropped =>
+                self.dead_letters_messages.dropped.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+        };
+
+        self.dead_letters_log = StatefulList::with_items(ui_messages)
     }
 }
 
@@ -239,6 +290,12 @@ impl<T> StatefulList<T> {
             state: ListState::default(),
             items,
         }
+    }
+
+    pub fn selected(&self) -> Option<&T> {
+        if !self.items.is_empty() {
+            self.state.selected().map(|x| &self.items[x])
+        } else { None }
     }
 
     pub fn next(&mut self) {
@@ -274,10 +331,10 @@ pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
     pub exit_reason: Option<String>,
-    pub tabs: TabsState<'a>,
+    pub tabs: TabsState<AppTabKind>,
     pub zmx: Option<ZMXTab>,
     pub slick: Option<SlickTab>,
-    pub actor_tree: Option<AkkaActorTreeTab>,
+    pub akka: Option<AkkaTab>,
 }
 
 impl<'a> App<'a> {
@@ -286,18 +343,18 @@ impl<'a> App<'a> {
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
         akka: Option<AkkaSettings>) -> App<'a> {
-        let mut tabs: Vec<Tab> = vec![];
+        let mut tabs: Vec<Tab<AppTabKind>> = vec![];
 
         if let Some(_) = zio_zmx_addr {
-            tabs.push(Tab { kind: TabKind::ZMX, title: "ZIO" })
+            tabs.push(Tab { kind: AppTabKind::ZMX, title: "ZIO".to_owned() })
         }
 
         if let Some(_) = jmx {
-            tabs.push(Tab { kind: TabKind::Slick, title: "Slick" })
+            tabs.push(Tab { kind: AppTabKind::Slick, title: "Slick".to_owned() })
         }
 
         if let Some(_) = akka {
-            tabs.push(Tab { kind: TabKind::AkkaActorTree, title: "Akka" })
+            tabs.push(Tab { kind: AppTabKind::Akka, title: "Akka".to_owned() })
         }
 
         App {
@@ -307,23 +364,23 @@ impl<'a> App<'a> {
             tabs: TabsState::new(tabs),
             zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
             slick: jmx.map(|_| SlickTab::new()),
-            actor_tree: akka.map(|_| AkkaActorTreeTab::new()),
+            akka: akka.map(|_| AkkaTab::new()),
         }
     }
 
     pub fn on_up(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.as_mut().unwrap().select_prev_fiber(),
-            TabKind::Slick => {}
-            TabKind::AkkaActorTree => self.actor_tree.as_mut().unwrap().select_prev_actor(),
+            AppTabKind::ZMX => self.zmx.as_mut().unwrap().select_prev_fiber(),
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.previous()
         }
     }
 
     pub fn on_down(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.as_mut().unwrap().select_next_fiber(),
-            TabKind::Slick => {}
-            TabKind::AkkaActorTree => self.actor_tree.as_mut().unwrap().select_next_actor(),
+            AppTabKind::ZMX => self.zmx.as_mut().unwrap().select_next_fiber(),
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.next()
         }
     }
 
@@ -335,9 +392,35 @@ impl<'a> App<'a> {
         self.tabs.previous();
     }
 
+    pub fn on_right_alt(&mut self) {
+        match self.tabs.current().kind {
+            AppTabKind::ZMX => {}
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => {
+                let akka = self.akka.as_mut().unwrap();
+                akka.dead_letters_tabs.next();
+                akka.reload_dead_letters_log();
+            }
+        }
+    }
+
+    pub fn on_left_alt(&mut self) {
+        match self.tabs.current().kind {
+            AppTabKind::ZMX => {}
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => {
+                let akka = self.akka.as_mut().unwrap();
+                akka.dead_letters_tabs.previous();
+                akka.reload_dead_letters_log();
+            }
+        }
+    }
+
     pub fn on_key(&mut self, c: char) {
         match c {
             'q' => self.quit(None),
+            'a' => self.on_left_alt(),
+            'd' => self.on_right_alt(),
             _ => {}
         }
     }
@@ -349,17 +432,17 @@ impl<'a> App<'a> {
 
     pub fn on_page_up(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_up(),
-            TabKind::Slick => {}
-            TabKind::AkkaActorTree => {}
+            AppTabKind::ZMX => self.zmx.as_mut().unwrap().scroll_up(),
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => self.akka.as_mut().unwrap().select_prev_actor(),
         }
     }
 
     pub fn on_page_down(&mut self) {
         match self.tabs.current().kind {
-            TabKind::ZMX => self.zmx.as_mut().unwrap().scroll_down(),
-            TabKind::Slick => {}
-            TabKind::AkkaActorTree => {}
+            AppTabKind::ZMX => self.zmx.as_mut().unwrap().scroll_down(),
+            AppTabKind::Slick => {}
+            AppTabKind::Akka => self.akka.as_mut().unwrap().select_next_actor(),
         }
     }
 }

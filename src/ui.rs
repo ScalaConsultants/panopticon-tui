@@ -10,7 +10,8 @@ use tui::{
     widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs, Text},
 };
 
-use crate::app::{AkkaActorTreeTab, App, SlickTab, TabKind, ZMXTab};
+use crate::akka::model::DeadLettersWindow;
+use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab};
 use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
 
@@ -32,9 +33,9 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
             .select(tabs.index);
         f.render_widget(tabs_widget, chunks[0]);
         match tabs.current().kind {
-            TabKind::ZMX => &app.zmx.as_mut().map(|mut t| draw_zio_tab(&mut f, &mut t, chunks[1])),
-            TabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
-            TabKind::AkkaActorTree => &app.actor_tree.as_mut().map(|t| draw_actor_tree_tab(&mut f, t, chunks[1])),
+            AppTabKind::ZMX => &app.zmx.as_mut().map(|mut t| draw_zio_tab(&mut f, &mut t, chunks[1])),
+            AppTabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
+            AppTabKind::Akka => &app.akka.as_mut().map(|t| draw_akka_tab(&mut f, t, chunks[1])),
         };
     })
 }
@@ -236,6 +237,13 @@ fn fiber_count_chart<F>(db: &ZMXTab, f: F) -> Vec<(f64, f64)>
         .collect()
 }
 
+fn dead_letters_window_chart<F>(tab: &AkkaTab, f: F) -> Vec<(f64, f64)>
+    where F: Fn(&DeadLettersWindow) -> u32, {
+    tab.dead_letters_windows.iter().enumerate()
+        .map(|(i, x)| (i as f64, f(x) as f64))
+        .collect()
+}
+
 fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
     where B: Backend,
 {
@@ -354,7 +362,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
     }
 }
 
-fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Rect)
+fn draw_akka_tab<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
     where B: Backend,
 {
     let chunks = Layout::default()
@@ -362,16 +370,158 @@ fn draw_actor_tree_tab<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Re
         .split(area);
     {
         let chunks = Layout::default()
-            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
             .split(chunks[0]);
-        draw_actor_tree(f, tab, chunks[0]);
-        draw_actor_count_chart(f, tab, chunks[1]);
+        {
+            let chunks = Layout::default()
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .direction(Direction::Horizontal)
+                .split(chunks[0]);
+            draw_actor_tree(f, tab, chunks[0]);
+            draw_actor_count_chart(f, tab, chunks[1]);
+        }
+        {
+            let chunks = Layout::default()
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .direction(Direction::Horizontal)
+                .split(chunks[1]);
+            draw_dead_letters_logs(f, tab, chunks[0]);
+            draw_dead_letters_window_chart(f, tab, chunks[1]);
+        }
     }
     draw_text(f, chunks[1]);
 }
 
+fn draw_dead_letters_logs<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
+    where B: Backend
+{
+    let chunks = Layout::default()
+        .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(6)].as_ref())
+        .split(area);
+    let titles = tab.dead_letters_tabs.titles();
+    let tabs_widget = Tabs::default()
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title("Dead Letter logs (<A> left tab, <D> right tab)"))
+        .titles(&titles)
+        .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Blue))
+        .select(tab.dead_letters_tabs.index);
+    f.render_widget(tabs_widget, chunks[0]);
+    draw_dead_letter_log(f, tab, chunks[1]);
+    draw_dead_letter_message_details(f, tab, chunks[2]);
+}
 
-fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Rect)
+fn draw_dead_letter_log<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
+    where B: Backend {
+    let items = tab.dead_letters_log.items.iter().map(|i| Text::raw(i.summary()));
+
+    let title = format!("{:?}, {} total (↑↓ select message)", tab.dead_letters_tabs.current().kind, tab.dead_letters_log.items.len());
+    let list = List::new(items)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title_style(Style::default().fg(Color::Cyan))
+            .title(&title))
+        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+        .highlight_symbol(">");
+
+    f.render_stateful_widget(list, area, &mut tab.dead_letters_log.state);
+}
+
+fn draw_dead_letter_message_details<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
+    where B: Backend {
+    let text = match tab.dead_letters_log.selected() {
+        None => vec![Text::raw("Select a message to see details")],
+        Some(m) => {
+            let mut items: Vec<Text> = vec![
+                Text::raw(format!("Data: {}\n", m.message)),
+                // todo: format with system locale
+                Text::raw(format!("Timestamp: {}\n", m.readable_timestamp().format("%d.%m.%Y %H:%M:%S"))),
+                Text::raw(format!("Sender: {}\n", m.sender)),
+                Text::raw(format!("Receiver: {}\n", m.recipient)),
+            ];
+            match &m.reason {
+                None => {}
+                Some(r) => {
+                    items.push(Text::raw(format!("Reason: {}\n", r)));
+                }
+            };
+            items
+        }
+    };
+
+    let p = Paragraph::new(text.iter())
+        .block(Block::default().borders(Borders::ALL))
+        .wrap(true);
+    f.render_widget(p, area);
+}
+
+fn draw_dead_letters_window_chart<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
+    where B: Backend
+{
+    let dead_letters_chart: Vec<(f64, f64)> = dead_letters_window_chart(tab, |x| x.dead_letters.count);
+    let unhandled_chart: Vec<(f64, f64)> = dead_letters_window_chart(tab, |x| x.unhandled.count);
+    let dropped_chart: Vec<(f64, f64)> = dead_letters_window_chart(tab, |x| x.dropped.count);
+
+    let datasets = [
+        Dataset::default()
+            .name("dead_letters")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::Green))
+            .data(&dead_letters_chart),
+        Dataset::default()
+            .name("unhandled")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::LightBlue))
+            .data(&unhandled_chart),
+        Dataset::default()
+            .name("dropped")
+            .marker(Marker::Braille)
+            .style(Style::default().fg(Color::White))
+            .data(&dropped_chart),
+    ];
+
+    let max = tab.dead_letters_windows.iter().map(|x| x.max()).max().unwrap_or(0);
+    let total = tab.dead_letters_windows.back().map_or(0, |x| x.total());
+    let dead_letters = tab.dead_letters_windows.back().map_or(0, |x| x.dead_letters.count);
+    let unhandled = tab.dead_letters_windows.back().map_or(0, |x| x.unhandled.count);
+    let dropped = tab.dead_letters_windows.back().map_or(0, |x| x.dropped.count);
+
+    let title = format!(
+        "Dead Letters for last {}ms (total={}, dead letters={}, unhandled={}, dropped={})",
+        tab.dead_letters_windows.back().map_or(0, |x| x.within_millis),
+        total,
+        dead_letters,
+        unhandled,
+        dropped
+    );
+    let label = &["0".to_owned(), ((max as f64) / 2.0).to_string(), max.to_string()];
+    let c = Chart::default()
+        .block(
+            Block::default()
+                .title(&title)
+                .title_style(Style::default().fg(Color::Cyan))
+                .borders(Borders::ALL)
+        )
+        .x_axis(
+            Axis::default()
+                .style(Style::default().fg(Color::Gray))
+                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .bounds([0.0, AkkaTab::MAX_DEAD_LETTERS_WINDOW_MEASURES as f64])
+                .labels(&["older", "recent"])
+        )
+        .y_axis(
+            Axis::default()
+                .style(Style::default().fg(Color::Gray))
+                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .bounds([-1.0, (max + 1) as f64])
+                .labels(label)
+        )
+        .datasets(&datasets);
+    f.render_widget(c, area);
+}
+
+fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
     where B: Backend,
 {
     let items = tab.actors.items.iter().map(|i| Text::raw(i));
@@ -380,14 +530,14 @@ fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &mut AkkaActorTreeTab, area: Rect)
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title("Actors (press <Enter> to reload the tree)"))
+            .title("Actors (<Enter> to reload, <PageUp>/<PageDown> to scroll)"))
         .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
         .highlight_symbol(">");
 
     f.render_stateful_widget(list, area, &mut tab.actors.state);
 }
 
-fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaActorTreeTab, area: Rect)
+fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
     where B: Backend,
 {
     let data: Vec<(&str, u64)> = tab.actor_counts.iter()

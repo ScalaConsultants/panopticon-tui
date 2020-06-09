@@ -1,7 +1,7 @@
 use jmx::MBeanClient;
 
 use crate::akka;
-use crate::akka::model::{ActorTreeNode, AkkaSettings};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow};
 use crate::jmx::client::JMXClient;
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::zio::model::Fiber;
@@ -15,6 +15,7 @@ pub enum FetcherRequest {
     SlickConfig,
     ActorTree,
     ActorCount,
+    DeadLetters,
 }
 
 pub enum FetcherResponse {
@@ -25,6 +26,7 @@ pub enum FetcherResponse {
     SlickConfig(Result<SlickConfig, String>),
     ActorTree(Result<Vec<ActorTreeNode>, String>),
     ActorCount(Result<u64, String>),
+    DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
     FatalFailure(String),
 }
 
@@ -98,6 +100,12 @@ impl Fetcher {
         let s = self.akka_settings.as_ref().unwrap();
         akka::client::get_actor_count(&s.count_address, s.count_timeout)
             .map_err(|e| format!("Error loading akka actor count: {}", e))
+    }
+
+    pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+        let s = self.akka_settings.as_ref().unwrap();
+        akka::client::get_deadletters(&s.dead_letters_address, s.dead_letters_window)
+            .map_err(|e| format!("Error loading dead letters metrics: {}", e))
     }
 
     fn format_slick_error(e: jmx::Error) -> String {
