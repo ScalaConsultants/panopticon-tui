@@ -18,7 +18,9 @@ jobs:
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
         toolchain: stable
+        components: cargo
     - name: Run tests
       working-directory: ./panopticon-tui
       run: cargo test --verbose
@@ -37,6 +39,7 @@ jobs:
     - name: Wait until server is up
       uses: nick-invision/retry@v1
       with:
+        timeout_minutes: 1
         retry_wait_seconds: 1
         max_attempts: 30
         command: curl localhost:8080/items
