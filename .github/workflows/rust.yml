@@ -31,4 +31,5 @@ jobs:
       with:
         java-version: 1.8
     - name: junk
+      working-directory: scala-app
       run: sbt +test
