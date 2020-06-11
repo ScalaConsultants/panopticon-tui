@@ -20,7 +20,6 @@ jobs:
       with:
         profile: minimal
         toolchain: stable
-        components: cargo
     - name: Run tests
       working-directory: ./panopticon-tui
       run: cargo test --verbose
