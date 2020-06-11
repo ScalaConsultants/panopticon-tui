@@ -113,7 +113,7 @@ To use these features, however, you'd have to enable publication of this data in
 Only HTTP way of transfer is supported for at the moment. To use it and see the actor data on a separate tab, launch Panopticon with following options:
 
 ```
-panopticon-tui --actor-tree http://localhost:8080/actor-tree --actor-count http://localhost:8080/actor-count --dead-letters http://localhost:8080/dead-letters
+panopticon-tui --actor-tree http://localhost:8080/actor-tree --actor-system-status http://localhost:8080/actor-system-status --dead-letters http://localhost:8080/dead-letters
 ```
 
 Replace the endpoint urls with the ones you set up with [akka-periscope](https://github.com/ScalaConsultants/akka-periscope).
