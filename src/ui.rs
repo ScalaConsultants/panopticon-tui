@@ -14,6 +14,8 @@ use crate::akka::model::DeadLettersWindow;
 use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab};
 use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
+use chrono::prelude::*;
+use humantime::format_duration;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
@@ -541,7 +543,12 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
         .map(|x| ("", x.to_owned()))
         .collect();
 
-    let title = format!("Running actors: {}", tab.actor_counts.back().unwrap_or(&0));
+    let title = format!(
+        "Running actors: {}. System started {}, uptime = {}",
+        tab.system_status.actor_count,
+        NaiveDateTime::from_timestamp((tab.system_status.start_time / 1000) as i64, 0).format("%d.%m.%Y %H:%M:%S"),
+        format_duration(std::time::Duration::from_secs(tab.system_status.uptime))
+    );
     let count_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
