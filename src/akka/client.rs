@@ -1,6 +1,5 @@
 use reqwest;
 use serde_json::Value;
-use serde::Deserialize;
 use crate::akka::model::*;
 use std::collections::HashMap;
 
@@ -8,8 +7,8 @@ pub fn get_actors(url: &String, timeout: u64) -> Result<Vec<ActorTreeNode>, Stri
     get_actors_async(url, timeout)
 }
 
-pub fn get_actor_count(url: &String, timeout: u64) -> Result<u64, String> {
-    get_actor_count_async(url, timeout)
+pub fn get_actor_system_status(url: &String, timeout: u64) -> Result<ActorSystemStatus, String> {
+    get_actor_system_status_async(url, timeout)
 }
 
 pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
@@ -68,18 +67,13 @@ fn build_actor_tree_iter(json: &Value, parent_id: Option<usize>, actors: &mut Ve
     };
 }
 
-#[derive(Deserialize)]
-struct CountResult {
-    result: u64
-}
-
 #[tokio::main]
-async fn get_actor_count_async(url: &String, timeout: u64) -> Result<u64, String> {
+async fn get_actor_system_status_async(url: &String, timeout: u64) -> Result<ActorSystemStatus, String> {
     let url = format!("{}?timeout={}", url, timeout);
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("Request to get actor count failed with status {}", response.status()));
     }
-    let body: CountResult = response.json().await.map_err(|e| e.to_string())?;
-    Ok(body.result)
+    let body: ActorSystemStatus = response.json().await.map_err(|e| e.to_string())?;
+    Ok(body)
 }

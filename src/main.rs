@@ -68,9 +68,9 @@ struct Cli {
     /// Address of http endpoint to get akka actor tree
     #[structopt(long = "actor-tree")]
     actor_tree: Option<String>,
-    /// Address of http endpoint to get current actor count
-    #[structopt(long = "actor-count")]
-    actor_count: Option<String>,
+    /// Address of http endpoint to get current actor system status
+    #[structopt(long = "actor-system-status")]
+    actor_system_status: Option<String>,
     /// Time period (in ms) to assemble akka actor tree
     #[structopt(long = "actor-tree-timeout", default_value = "1000")]
     actor_tree_timeout: u64,
@@ -96,12 +96,12 @@ impl Cli {
     }
 
     fn akka_settings(&self) -> Option<AkkaSettings> {
-        match (&self.actor_tree, &self.actor_count, &self.dead_letters) {
-            (Some(tree_addr), Some(count_addr), Some(dead_letters)) => Some(AkkaSettings {
+        match (&self.actor_tree, &self.actor_system_status, &self.dead_letters) {
+            (Some(tree_addr), Some(status_addr), Some(dead_letters)) => Some(AkkaSettings {
                 tree_address: tree_addr.to_owned(),
                 tree_timeout: self.actor_tree_timeout,
-                count_address: count_addr.to_owned(),
-                count_timeout: (self.tick_rate as f64 * 0.8) as u64,
+                status_address: status_addr.to_owned(),
+                status_timeout: (self.tick_rate as f64 * 0.8) as u64,
                 dead_letters_address: dead_letters.to_owned(),
                 dead_letters_window: self.dead_letters_window,
             }),
@@ -180,8 +180,8 @@ fn main() -> Result<(), failure::Error> {
                                 respond(FetcherResponse::SlickConfig(fetcher.get_slick_config())),
                             FetcherRequest::ActorTree =>
                                 respond(FetcherResponse::ActorTree(fetcher.get_actor_tree())),
-                            FetcherRequest::ActorCount =>
-                                respond(FetcherResponse::ActorCount(fetcher.get_actor_count())),
+                            FetcherRequest::ActorSystemStatus =>
+                                respond(FetcherResponse::ActorSystemStatus(fetcher.get_actor_system_status())),
                             FetcherRequest::DeadLetters =>
                                 respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
                         }
@@ -285,10 +285,10 @@ fn main() -> Result<(), failure::Error> {
                             akka.reload_dead_letters_log();
                         }
                     },
-                FetcherResponse::ActorCount(d) =>
+                FetcherResponse::ActorSystemStatus(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.akka.as_mut().unwrap().append_actor_count(x)
+                        Ok(x) => app.akka.as_mut().unwrap().append_system_status(x)
                     },
                 FetcherResponse::DeadLetters(d) =>
                     match d {
@@ -313,7 +313,7 @@ fn main() -> Result<(), failure::Error> {
                 }
 
                 if app.akka.is_some() {
-                    txf.send(FetcherRequest::ActorCount)?;
+                    txf.send(FetcherRequest::ActorSystemStatus)?;
                 }
                 txf.send(FetcherRequest::DeadLetters)?;
             }

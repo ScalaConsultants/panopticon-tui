@@ -3,7 +3,7 @@ use std::iter::Iterator;
 
 use tui::widgets::ListState;
 
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus};
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
@@ -200,6 +200,7 @@ pub enum DeadLettersTabKind {
 pub struct AkkaTab {
     pub actors: StatefulList<String>,
     pub actor_counts: VecDeque<u64>,
+    pub system_status: ActorSystemStatus,
     pub dead_letters_messages: DeadLettersSnapshot,
     pub dead_letters_windows: VecDeque<DeadLettersWindow>,
     pub dead_letters_tabs: TabsState<DeadLettersTabKind>,
@@ -229,6 +230,11 @@ impl AkkaTab {
                 index: 0,
             },
             dead_letters_log: StatefulList::with_items(vec![]),
+            system_status: ActorSystemStatus {
+                actor_count: 0,
+                uptime: 0,
+                start_time: 0,
+            },
         }
     }
 
@@ -250,11 +256,12 @@ impl AkkaTab {
         self.actors.next();
     }
 
-    pub fn append_actor_count(&mut self, c: u64) {
+    pub fn append_system_status(&mut self, c: ActorSystemStatus) {
         if self.actor_counts.len() > AkkaTab::MAX_ACTOR_COUNT_MEASURES {
             self.actor_counts.pop_front();
         }
-        self.actor_counts.push_back(c);
+        self.actor_counts.push_back(c.actor_count);
+        self.system_status = c;
     }
 
     pub fn append_dead_letters(&mut self, snapshot: DeadLettersSnapshot, window: DeadLettersWindow) {

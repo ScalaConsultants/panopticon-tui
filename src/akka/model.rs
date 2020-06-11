@@ -6,10 +6,10 @@ use serde::Deserialize;
 #[derive(Clone)]
 pub struct AkkaSettings {
     pub tree_address: String,
-    pub count_address: String,
+    pub status_address: String,
     pub dead_letters_address: String,
     pub tree_timeout: u64,
-    pub count_timeout: u64,
+    pub status_timeout: u64,
     pub dead_letters_window: u64,
 }
 
@@ -87,6 +87,16 @@ pub struct DeadLettersUIMessage {
     pub timestamp: u64,
     pub reason: Option<String>,
 }
+
+#[derive(Deserialize)]
+pub struct ActorSystemStatus {
+    #[serde(rename(deserialize = "actorCount"))]
+    pub actor_count: u64,
+    pub uptime: u64,
+    #[serde(rename(deserialize = "startTime"))]
+    pub start_time: u64,
+}
+
 
 impl DeadLettersWindow {
     pub fn max(&self) -> u32 {

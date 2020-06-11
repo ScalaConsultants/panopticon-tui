@@ -1,7 +1,7 @@
 use jmx::MBeanClient;
 
 use crate::akka;
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, ActorSystemStatus};
 use crate::jmx::client::JMXClient;
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::zio::model::Fiber;
@@ -14,7 +14,7 @@ pub enum FetcherRequest {
     SlickMetrics,
     SlickConfig,
     ActorTree,
-    ActorCount,
+    ActorSystemStatus,
     DeadLetters,
 }
 
@@ -25,7 +25,7 @@ pub enum FetcherResponse {
     SlickMetrics(Result<SlickMetrics, String>),
     SlickConfig(Result<SlickConfig, String>),
     ActorTree(Result<Vec<ActorTreeNode>, String>),
-    ActorCount(Result<u64, String>),
+    ActorSystemStatus(Result<ActorSystemStatus, String>),
     DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
     FatalFailure(String),
 }
@@ -96,10 +96,10 @@ impl Fetcher {
             .map_err(|e| format!("Error loading akka actor tree tree: {}", e))
     }
 
-    pub fn get_actor_count(&self) -> Result<u64, String> {
+    pub fn get_actor_system_status(&self) -> Result<ActorSystemStatus, String> {
         let s = self.akka_settings.as_ref().unwrap();
-        akka::client::get_actor_count(&s.count_address, s.count_timeout)
-            .map_err(|e| format!("Error loading akka actor count: {}", e))
+        akka::client::get_actor_system_status(&s.status_address, s.status_timeout)
+            .map_err(|e| format!("Error loading akka actor system status: {}", e))
     }
 
     pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
