@@ -25,7 +25,7 @@ use tui::{
     Terminal,
 };
 
-use crate::app::{App, TabKind};
+use crate::app::{App, AppTabKind};
 use crate::fetcher::{Fetcher, FetcherRequest, FetcherResponse};
 
 use crate::akka::model::AkkaSettings;
@@ -74,6 +74,12 @@ struct Cli {
     /// Time period (in ms) to assemble akka actor tree
     #[structopt(long = "actor-tree-timeout", default_value = "1000")]
     actor_tree_timeout: u64,
+    /// Address of http endpoint to get akka dead-letters metrics
+    #[structopt(long = "dead-letters")]
+    dead_letters: Option<String>,
+    /// Time window for akka dead-letters metrics
+    #[structopt(long = "dead-letters-window", default_value = "5000")]
+    dead_letters_window: u64,
 }
 
 impl Cli {
@@ -90,12 +96,14 @@ impl Cli {
     }
 
     fn akka_settings(&self) -> Option<AkkaSettings> {
-        match (&self.actor_tree, &self.actor_count) {
-            (Some(tree_addr), Some(count_addr)) => Some(AkkaSettings {
+        match (&self.actor_tree, &self.actor_count, &self.dead_letters) {
+            (Some(tree_addr), Some(count_addr), Some(dead_letters)) => Some(AkkaSettings {
                 tree_address: tree_addr.to_owned(),
                 tree_timeout: self.actor_tree_timeout,
                 count_address: count_addr.to_owned(),
                 count_timeout: (self.tick_rate as f64 * 0.8) as u64,
+                dead_letters_address: dead_letters.to_owned(),
+                dead_letters_window: self.dead_letters_window,
             }),
             _ => None
         }
@@ -174,6 +182,8 @@ fn main() -> Result<(), failure::Error> {
                                 respond(FetcherResponse::ActorTree(fetcher.get_actor_tree())),
                             FetcherRequest::ActorCount =>
                                 respond(FetcherResponse::ActorCount(fetcher.get_actor_count())),
+                            FetcherRequest::DeadLetters =>
+                                respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
                         }
                     }
             }
@@ -227,9 +237,9 @@ fn main() -> Result<(), failure::Error> {
                 KeyCode::PageDown => app.on_page_down(),
                 KeyCode::Enter => {
                     match app.tabs.current().kind {
-                        TabKind::ZMX => txf.send(FetcherRequest::FiberDump)?,
-                        TabKind::Slick => {}
-                        TabKind::AkkaActorTree => txf.send(FetcherRequest::ActorTree)?,
+                        AppTabKind::ZMX => txf.send(FetcherRequest::FiberDump)?,
+                        AppTabKind::Slick => {}
+                        AppTabKind::Akka => txf.send(FetcherRequest::ActorTree)?,
                     }
                 }
                 _ => {}
@@ -269,12 +279,21 @@ fn main() -> Result<(), failure::Error> {
                 FetcherResponse::ActorTree(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.actor_tree.as_mut().unwrap().update_actor_tree(x)
+                        Ok(x) => {
+                            let akka = app.akka.as_mut().unwrap();
+                            akka.update_actor_tree(x);
+                            akka.reload_dead_letters_log();
+                        }
                     },
                 FetcherResponse::ActorCount(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.actor_tree.as_mut().unwrap().append_actor_count(x)
+                        Ok(x) => app.akka.as_mut().unwrap().append_actor_count(x)
+                    },
+                FetcherResponse::DeadLetters(d) =>
+                    match d {
+                        Err(e) => app.quit(Some(e)),
+                        Ok(x) => app.akka.as_mut().unwrap().append_dead_letters(x.0, x.1)
                     },
             }
 
@@ -293,9 +312,10 @@ fn main() -> Result<(), failure::Error> {
                     None => {}
                 }
 
-                if app.actor_tree.is_some() {
+                if app.akka.is_some() {
                     txf.send(FetcherRequest::ActorCount)?;
                 }
+                txf.send(FetcherRequest::DeadLetters)?;
             }
         }
         if app.should_quit {
