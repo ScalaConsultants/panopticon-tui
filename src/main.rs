@@ -80,6 +80,9 @@ struct Cli {
     /// Time window for akka dead-letters metrics
     #[structopt(long = "dead-letters-window", default_value = "5000")]
     dead_letters_window: u64,
+    /// if true then panopticon only checks all the requested connections and exits
+    #[structopt(long = "check")]
+    check: bool,
 }
 
 impl Cli {
@@ -125,6 +128,8 @@ fn main() -> Result<(), failure::Error> {
 
     let tick_rate = Duration::from_millis(cli.tick_rate);
     let has_jmx = cli.jmx_settings().is_some();
+    let has_akka = cli.akka_settings().is_some();
+    let has_zio = cli.zio_zmx.is_some();
 
     enable_raw_mode()?;
 
@@ -141,6 +146,7 @@ fn main() -> Result<(), failure::Error> {
         cli.zio_zmx.clone(),
         cli.jmx_settings(),
         cli.akka_settings(),
+        cli.check,
     );
 
     terminal.clear()?;
@@ -197,10 +203,17 @@ fn main() -> Result<(), failure::Error> {
         thread::spawn(move || {
             let mut last_tick = Instant::now();
 
+            // prepopulate some manually loaded data
             if has_jmx {
                 txf.send(FetcherRequest::SlickConfig).unwrap();
                 txf.send(FetcherRequest::HikariMetrics).unwrap();
                 txf.send(FetcherRequest::SlickMetrics).unwrap();
+            }
+            if has_akka {
+                txf.send(FetcherRequest::ActorTree).unwrap();
+            }
+            if has_zio {
+                txf.send(FetcherRequest::FiberDump).unwrap();
             }
 
             loop {
@@ -216,6 +229,26 @@ fn main() -> Result<(), failure::Error> {
                 }
             }
         });
+    }
+
+    // stub options that are turned-off
+    if app.check_status.is_check_mode {
+        if !has_akka {
+            app.check_status.checks_passed.insert(FetcherRequest::ActorTree);
+            app.check_status.checks_passed.insert(FetcherRequest::ActorSystemStatus);
+            app.check_status.checks_passed.insert(FetcherRequest::DeadLetters);
+        }
+
+        if !has_zio {
+            app.check_status.checks_passed.insert(FetcherRequest::FiberDump);
+            app.check_status.checks_passed.insert(FetcherRequest::RegularFiberDump);
+        }
+
+        if !has_jmx {
+            app.check_status.checks_passed.insert(FetcherRequest::SlickConfig);
+            app.check_status.checks_passed.insert(FetcherRequest::HikariMetrics);
+            app.check_status.checks_passed.insert(FetcherRequest::SlickMetrics);
+        }
     }
 
     loop {
@@ -251,17 +284,30 @@ fn main() -> Result<(), failure::Error> {
                 FetcherResponse::FiberDump(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.zmx.as_mut().unwrap().replace_fiber_dump(x),
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::FiberDump);
+                            }
+                            app.zmx.as_mut().unwrap().replace_fiber_dump(x);
+                        }
                     },
                 FetcherResponse::RegularFiberDump(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.zmx.as_mut().unwrap().append_fiber_dump_for_counts(x),
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::RegularFiberDump);
+                            }
+                            app.zmx.as_mut().unwrap().append_fiber_dump_for_counts(x)
+                        }
                     },
                 FetcherResponse::HikariMetrics(d) =>
                     match d {
                         Err(_) => app.slick.as_mut().unwrap().has_hikari = false,
                         Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::HikariMetrics);
+                            }
                             app.slick.as_mut().unwrap().has_hikari = true;
                             app.slick.as_mut().unwrap().append_hikari_metrics(x)
                         }
@@ -269,17 +315,30 @@ fn main() -> Result<(), failure::Error> {
                 FetcherResponse::SlickMetrics(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.slick.as_mut().unwrap().append_slick_metrics(x)
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::SlickMetrics);
+                            }
+                            app.slick.as_mut().unwrap().append_slick_metrics(x)
+                        }
                     },
                 FetcherResponse::SlickConfig(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.slick.as_mut().unwrap().replace_slick_config(x)
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::SlickConfig);
+                            }
+                            app.slick.as_mut().unwrap().replace_slick_config(x)
+                        }
                     },
                 FetcherResponse::ActorTree(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
                         Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::ActorTree);
+                            }
                             let akka = app.akka.as_mut().unwrap();
                             akka.update_actor_tree(x);
                             akka.reload_dead_letters_log();
@@ -288,16 +347,36 @@ fn main() -> Result<(), failure::Error> {
                 FetcherResponse::ActorSystemStatus(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.akka.as_mut().unwrap().append_system_status(x)
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::ActorSystemStatus);
+                            }
+                            app.akka.as_mut().unwrap().append_system_status(x)
+                        }
                     },
                 FetcherResponse::DeadLetters(d) =>
                     match d {
                         Err(e) => app.quit(Some(e)),
-                        Ok(x) => app.akka.as_mut().unwrap().append_dead_letters(x.0, x.1)
+                        Ok(x) => {
+                            if app.check_status.is_check_mode {
+                                app.check_status.checks_passed.insert(FetcherRequest::DeadLetters);
+                            }
+                            app.akka.as_mut().unwrap().append_dead_letters(x.0, x.1)
+                        }
                     },
             }
 
             Event::Tick => {
+                if app.check_status.is_check_mode {
+                    if app.check_status.is_success() {
+                        app.quit(None)
+                    } else if app.check_status.ticks_passed >= 10 {
+                        app.quit(Some("Connection check took too long to pass".to_owned()))
+                    } else {
+                        app.check_status.ticks_passed += 1;
+                    }
+                }
+
                 if app.zmx.is_some() {
                     txf.send(FetcherRequest::RegularFiberDump)?;
                 }
@@ -323,6 +402,12 @@ fn main() -> Result<(), failure::Error> {
         }
     }
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    app.exit_reason.map(|e| println!("{}", e));
-    Ok(())
+
+    match app.exit_reason {
+        None => Ok(()),
+        Some(e) => {
+            println!("{}", e);
+            std::process::exit(1);
+        }
+    }
 }

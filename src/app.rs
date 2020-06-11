@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashSet};
 use std::iter::Iterator;
 
 use tui::widgets::ListState;
@@ -7,6 +7,8 @@ use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadL
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
+use crate::fetcher::FetcherRequest;
+use lazy_static::lazy_static;
 
 pub struct UIFiber {
     pub label: String,
@@ -334,6 +336,31 @@ impl<T> StatefulList<T> {
     }
 }
 
+pub struct CheckStatus {
+    pub is_check_mode: bool,
+    pub checks_passed: HashSet<FetcherRequest>,
+    pub ticks_passed: u8,
+}
+
+impl CheckStatus {
+    pub fn is_success(&self) -> bool {
+        self.checks_passed.is_superset(&ALL_CHECKS)
+    }
+}
+
+lazy_static! {
+    static ref ALL_CHECKS: HashSet<FetcherRequest> = vec![
+        FetcherRequest::FiberDump,
+        FetcherRequest::RegularFiberDump,
+        FetcherRequest::HikariMetrics,
+        FetcherRequest::SlickMetrics,
+        FetcherRequest::SlickConfig,
+        FetcherRequest::ActorTree,
+        FetcherRequest::ActorSystemStatus,
+        FetcherRequest::DeadLetters,
+    ].iter().cloned().collect();
+}
+
 pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
@@ -342,6 +369,7 @@ pub struct App<'a> {
     pub zmx: Option<ZMXTab>,
     pub slick: Option<SlickTab>,
     pub akka: Option<AkkaTab>,
+    pub check_status: CheckStatus,
 }
 
 impl<'a> App<'a> {
@@ -349,7 +377,8 @@ impl<'a> App<'a> {
         title: &'a str,
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
-        akka: Option<AkkaSettings>) -> App<'a> {
+        akka: Option<AkkaSettings>,
+        check_mode: bool) -> App<'a> {
         let mut tabs: Vec<Tab<AppTabKind>> = vec![];
 
         if let Some(_) = zio_zmx_addr {
@@ -372,6 +401,11 @@ impl<'a> App<'a> {
             zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
             slick: jmx.map(|_| SlickTab::new()),
             akka: akka.map(|_| AkkaTab::new()),
+            check_status: CheckStatus {
+                is_check_mode: check_mode,
+                checks_passed: HashSet::new(),
+                ticks_passed: 0,
+            },
         }
     }
 

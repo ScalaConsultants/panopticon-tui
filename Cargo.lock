@@ -947,6 +947,7 @@ dependencies = [
  "futures",
  "humantime 2.0.0",
  "jmx",
+ "lazy_static",
  "openssl",
  "redis-protocol",
  "reqwest",
