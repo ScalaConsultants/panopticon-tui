@@ -19,22 +19,6 @@ pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot
 async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
     let url = format!("{}?window={}", url, window);
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("Request to get actor tree failed with status: {}", response.status()));
-    }
-
-    let metrics: DeadLettersMetrics = response.json().await.map_err(|e| e.to_string())?;
-    Ok((metrics.snapshot, metrics.window))
-}
-
-pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
-    get_deadletters_async(url, window)
-}
-
-#[tokio::main]
-async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
-    let url = format!("{}?window={}", url, window);
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if response.status().is_success() {
         let metrics: DeadLettersMetrics = response.json().await.map_err(|e| e.to_string())?;
         Ok((metrics.snapshot, metrics.window))

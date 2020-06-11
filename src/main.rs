@@ -184,8 +184,6 @@ fn main() -> Result<(), failure::Error> {
                                 respond(FetcherResponse::ActorSystemStatus(fetcher.get_actor_system_status())),
                             FetcherRequest::DeadLetters =>
                                 respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
-                            FetcherRequest::DeadLetters =>
-                                respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
                         }
                     }
             }
