@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       with:
-        path: panopticon-tui
+        path: ./panopticon-tui
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -34,6 +34,15 @@ jobs:
     - name: Launch example scala app
       working-directory: ./scala-app
       run: sbt -Djline.terminal=jline.UnsupportedTerminal run &
+    - name: Wait until server is up
+      uses: nick-invision/retry@v1
+      with:
+        retry_wait_seconds: 1
+        max_attempts: 30
+        command: curl localhost:8080/items
+    - name: LS
+      working-directory: ./panopticon-tui
+      run: ls
     - name: Run panopticon connection checks
       working-directory: ./panopticon-tui
       run: ./target/debug/panopticon-tui --tick-rate=2000 --zio-zmx localhost:6789  --actor-tree http://localhost:8080/panopticon/actor-tree --actor-system-status http://localhost:8080/panopticon/actor-system-status --jmx localhost:9010 --db-pool-name myDb --dead-letters http://localhost:8080/panopticon/dead-letters --check
