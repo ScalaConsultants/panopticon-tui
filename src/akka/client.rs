@@ -27,16 +27,32 @@ async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLetters
     Ok((metrics.snapshot, metrics.window))
 }
 
+pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+    get_deadletters_async(url, window)
+}
+
+#[tokio::main]
+async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+    let url = format!("{}?window={}", url, window);
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if response.status().is_success() {
+        let metrics: DeadLettersMetrics = response.json().await.map_err(|e| e.to_string())?;
+        Ok((metrics.snapshot, metrics.window))
+    } else {
+        Err(format!("Request to get actor tree failed with status: {}", response.status()))
+    }
+}
+
 #[tokio::main]
 async fn get_actors_async(url: &String, timeout: u64) -> Result<Vec<ActorTreeNode>, String> {
     let url = format!("{}?timeout={}", url, timeout);
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("Request to get actor tree failed with status: {}", response.status()));
+    if response.status().is_success() {
+        let mut response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
+        Ok(build_actor_tree(&mut response_body))
+    } else {
+        Err(format!("Request to get actor tree failed with status: {}", response.status()))
     }
-
-    let mut response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
-    Ok(build_actor_tree(&mut response_body))
 }
 
 fn build_actor_tree(json: &mut HashMap<String, Value>) -> Vec<ActorTreeNode> {
@@ -71,9 +87,10 @@ fn build_actor_tree_iter(json: &Value, parent_id: Option<usize>, actors: &mut Ve
 async fn get_actor_system_status_async(url: &String, timeout: u64) -> Result<ActorSystemStatus, String> {
     let url = format!("{}?timeout={}", url, timeout);
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("Request to get actor count failed with status {}", response.status()));
+    if response.status().is_success() {
+        let body: ActorSystemStatus = response.json().await.map_err(|e| e.to_string())?;
+        Ok(body)
+    } else {
+        return Err(format!("Request to get actor count failed with status {}", response.status()))
     }
-    let body: ActorSystemStatus = response.json().await.map_err(|e| e.to_string())?;
-    Ok(body)
 }

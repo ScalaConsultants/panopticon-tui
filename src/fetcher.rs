@@ -16,6 +16,7 @@ pub enum FetcherRequest {
     ActorTree,
     ActorSystemStatus,
     DeadLetters,
+    DeadLetters,
 }
 
 pub enum FetcherResponse {
@@ -26,6 +27,7 @@ pub enum FetcherResponse {
     SlickConfig(Result<SlickConfig, String>),
     ActorTree(Result<Vec<ActorTreeNode>, String>),
     ActorSystemStatus(Result<ActorSystemStatus, String>),
+    DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
     DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
     FatalFailure(String),
 }
@@ -100,6 +102,12 @@ impl Fetcher {
         let s = self.akka_settings.as_ref().unwrap();
         akka::client::get_actor_system_status(&s.status_address, s.status_timeout)
             .map_err(|e| format!("Error loading akka actor system status: {}", e))
+    }
+
+    pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
+        let s = self.akka_settings.as_ref().unwrap();
+        akka::client::get_deadletters(&s.dead_letters_address, s.dead_letters_window)
+            .map_err(|e| format!("Error loading dead letters metrics: {}", e))
     }
 
     pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {

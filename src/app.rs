@@ -284,6 +284,27 @@ impl AkkaTab {
 
         self.dead_letters_log = StatefulList::with_items(ui_messages)
     }
+
+    pub fn append_dead_letters(&mut self, snapshot: DeadLettersSnapshot, window: DeadLettersWindow) {
+        if self.dead_letters_windows.len() > AkkaTab::MAX_DEAD_LETTERS_WINDOW_MEASURES {
+            self.dead_letters_windows.pop_front();
+        }
+        self.dead_letters_windows.push_back(window);
+        self.dead_letters_messages = snapshot;
+    }
+
+    pub fn reload_dead_letters_log(&mut self) {
+        let ui_messages: Vec<DeadLettersUIMessage> = match self.dead_letters_tabs.current().kind {
+            DeadLettersTabKind::DeadLetters =>
+                self.dead_letters_messages.dead_letters.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+            DeadLettersTabKind::Unhandled =>
+                self.dead_letters_messages.unhandled.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+            DeadLettersTabKind::Dropped =>
+                self.dead_letters_messages.dropped.iter().map(|x| x.value.to_ui(x.timestamp)).collect(),
+        };
+
+        self.dead_letters_log = StatefulList::with_items(ui_messages)
+    }
 }
 
 pub struct StatefulList<T> {
