@@ -15,12 +15,13 @@ jobs:
     - uses: actions/checkout@v2
       with:
         path: panopticon-tui
+    - name: Install rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
     - name: Run tests
       working-directory: panopticon-tui
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --verbose
+      run: cargo test --verbose
     - name: Clone example scala app
       uses: actions/checkout@v2
       with:
