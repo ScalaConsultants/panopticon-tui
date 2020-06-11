@@ -17,9 +17,9 @@ jobs:
         path: panopticon-tui
     - name: Run tests
       uses: actions-rs/cargo@v1
+      working-directory: panopticon-tui
       with:
         command: test
-        working-directory: panopticon-tui
         args: --verbose
     - name: Clone example scala app
       uses: actions/checkout@v2
