@@ -16,8 +16,8 @@ jobs:
       with:
         path: panopticon-tui
     - name: Run tests
-      uses: actions-rs/cargo@v1
       working-directory: panopticon-tui
+      uses: actions-rs/cargo@v1
       with:
         command: test
         args: --verbose
