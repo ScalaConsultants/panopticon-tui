@@ -131,9 +131,11 @@ fn main() -> Result<(), failure::Error> {
     let has_akka = cli.akka_settings().is_some();
     let has_zio = cli.zio_zmx.is_some();
 
-    enable_raw_mode()?;
-
     let mut stdout = stdout();
+    if (!cli.check) {
+        enable_raw_mode()?;
+    }
+
     if (!cli.check) {
         execute!(stdout, EnterAlternateScreen)?;
     }
