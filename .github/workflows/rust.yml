@@ -11,7 +11,7 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:18.04
+      image: rust:latest
       options: -t
     services:
       scala-app:
