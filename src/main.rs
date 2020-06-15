@@ -134,7 +134,9 @@ fn main() -> Result<(), failure::Error> {
     enable_raw_mode()?;
 
     let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    if (!cli.check) {
+        execute!(stdout, EnterAlternateScreen)?;
+    }
 
     let backend = CrosstermBackend::new(stdout);
 
