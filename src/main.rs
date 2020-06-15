@@ -314,8 +314,8 @@ fn main() -> Result<(), failure::Error> {
 
                 if app.akka.is_some() {
                     txf.send(FetcherRequest::ActorSystemStatus)?;
+                    txf.send(FetcherRequest::DeadLetters)?;
                 }
-                txf.send(FetcherRequest::DeadLetters)?;
             }
         }
         if app.should_quit {
