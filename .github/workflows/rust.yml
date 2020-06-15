@@ -10,6 +10,9 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    container:
+      image: ubuntu:18.04
+      options: -t
     services:
       scala-app:
         image: vpavkin/panopticon-example:0.1.0
