@@ -132,13 +132,9 @@ fn main() -> Result<(), failure::Error> {
     let has_zio = cli.zio_zmx.is_some();
 
     let mut stdout = stdout();
-    if (!cli.check) {
-        enable_raw_mode()?;
-    }
+    enable_raw_mode()?;
 
-    if (!cli.check) {
-        execute!(stdout, EnterAlternateScreen)?;
-    }
+    execute!(stdout, EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(stdout);
 
