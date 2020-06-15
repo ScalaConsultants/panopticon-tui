@@ -28,5 +28,9 @@ jobs:
         toolchain: stable
     - name: Run tests
       run: cargo test --verbose
+    - name: Build
+      run: cargo build
+    - name: LS
+      run: ls
     - name: Run panopticon connection checks
       run: ./target/debug/panopticon-tui --tick-rate=2000 --zio-zmx localhost:6789  --actor-tree http://localhost:8080/panopticon/actor-tree --actor-system-status http://localhost:8080/panopticon/actor-system-status --jmx localhost:9010 --db-pool-name myDb --dead-letters http://localhost:8080/panopticon/dead-letters --check
