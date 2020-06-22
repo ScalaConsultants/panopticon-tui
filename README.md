@@ -14,7 +14,7 @@ Currently supports:
 
 ### Prerequisites
 
-You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.0/jmx/) crate).
+You'll need to have java installed (it is loaded dynamically by [jmx](https://docs.rs/jmx/0.2.1/jmx/) crate).
 
 ### Example
 

@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.2.1]
+### Changed
+Bumped jmx to 0.2.1 which should fix the issue with auto-locating jdk on MacOS
+
 ## [0.2.0]
 ### Added
 - Akka deadletters metrics (via [akka-periscope](https://github.com/ScalaConsultants/akka-periscope))
