@@ -8,11 +8,6 @@ use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, Slick
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
 
-pub struct UIFiber {
-    pub label: String,
-    pub dump: String,
-}
-
 #[derive(Clone)]
 pub enum AppTabKind {
     ZMX,
@@ -106,12 +101,14 @@ impl ZMXTab {
     }
 
     pub fn replace_fiber_dump(&mut self, dump: Vec<Fiber>) {
-        let list: Vec<UIFiber> = tree::tree_list_widget(dump, true)
-            .iter()
-            .map(|(label, fb)| UIFiber { label: label.to_owned(), dump: fb.dump.to_owned() })
-            .collect();
-        let mut fib_labels: Vec<String> = list.iter().map(|f| f.label.clone()).collect();
-        let mut fib_dumps = list.iter().map(|f| f.dump.to_owned()).collect::<Vec<String>>();
+        let mut fib_labels: Vec<String> = Vec::new();
+        let mut fib_dumps: Vec<String> = Vec::new();
+        tree::tree_list_widget(dump, true)
+            .into_iter()
+            .for_each(|(labels, fiber)| {
+                fib_labels.push(labels);
+                fib_dumps.push(fiber.dump);
+            });
 
         self.fibers.items.clear();
         self.fibers.items.append(&mut fib_labels);
@@ -147,7 +144,7 @@ impl ZMXTab {
     }
 
     fn prepare_dump(s: String) -> (String, u16) {
-        (s.clone(), s.lines().collect::<Vec<&str>>().len() as u16)
+        (s.to_owned(), s.lines().size_hint().0 as u16)
     }
 }
 
@@ -460,7 +457,6 @@ mod tests {
 
     use crate::app::{StatefulList, ZMXTab};
     use crate::zio::model::{Fiber, FiberStatus};
-    use crate::zio::zmx::StubZMXClient;
 
     #[test]
     fn zmx_tab_dumps_fibers() {
