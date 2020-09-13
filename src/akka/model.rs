@@ -100,7 +100,7 @@ pub struct ActorSystemStatus {
 
 impl DeadLettersWindow {
     pub fn max(&self) -> u32 {
-        vec![self.dead_letters.count, self.unhandled.count, self.dropped.count].iter().max().map(|x| x.to_owned()).unwrap_or(0)
+        vec![self.dead_letters.count, self.unhandled.count, self.dropped.count].into_iter().max().unwrap_or(0)
     }
 
     pub fn total(&self) -> u32 {
@@ -154,9 +154,9 @@ impl DeadLettersUIMessage {
             if diff <= 0 {
                 "just now".to_owned()
             } else if diff_min > 0 {
-                format!("{} min ago", diff_min).to_owned()
+                format!("{} min ago", diff_min)
             } else {
-                format!("{} sec ago", diff_sec).to_owned()
+                format!("{} sec ago", diff_sec)
             };
         format!("<{}> {}", ago, self.message)
     }

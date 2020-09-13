@@ -66,7 +66,7 @@ impl ZMXTab {
     pub fn new() -> ZMXTab {
         ZMXTab {
             fibers: StatefulList::with_items(vec![]),
-            selected_fiber_dump: ("".to_string(), 1),
+            selected_fiber_dump: ("".to_owned(), 1),
             fiber_dump_all: vec![],
             scroll: 0,
             fiber_counts: VecDeque::new(),
@@ -237,8 +237,8 @@ impl AkkaTab {
 
     pub fn update_actor_tree(&mut self, actors: Vec<ActorTreeNode>) {
         let mut list: Vec<String> = tree::tree_list_widget(actors, false)
-            .iter()
-            .map(|x| x.0.to_owned())
+            .into_iter()
+            .map(|x| x.0)
             .collect();
 
         self.actors.items.clear();
