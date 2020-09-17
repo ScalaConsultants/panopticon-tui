@@ -89,8 +89,8 @@ async fn get_akka_cluster_status_async(url: &String) -> Result<Vec<ClusterMember
     if response.status().is_success() {
         let response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
         if let Some(w) = response_body.get("members") {
-            let u: Vec<ClusterMember> = serde_json::from_value(w.to_owned()).unwrap();
-            Ok(u)
+            let members: Vec<ClusterMember> = serde_json::from_value(w.to_owned()).unwrap();
+            Ok(members)
         } else {
             Err(format!("Request to get cluster status failed while deserializing"))
         }

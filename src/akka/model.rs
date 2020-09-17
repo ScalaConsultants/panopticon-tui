@@ -1,6 +1,7 @@
 extern crate chrono;
 
 use chrono::prelude::*;
+use std::fmt;
 use serde::Deserialize;
 
 #[derive(Clone)]
@@ -173,5 +174,11 @@ impl DeadLettersUIMessage {
 
     pub fn readable_timestamp(&self) -> NaiveDateTime {
         NaiveDateTime::from_timestamp((self.timestamp / 1000) as i64, 0)
+    }
+}
+
+impl fmt::Display for ClusterMember {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "id: {}, status: {}", self.node_uid, self.status)
     }
 }

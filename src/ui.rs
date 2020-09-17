@@ -377,13 +377,15 @@ fn draw_akka_tab<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
                 .direction(Direction::Horizontal)
                 .split(chunks[0]);
             {
-                let chunks = Layout::default()
-                    .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-                    .direction(Direction::Vertical)
-                    .split(chunks[1]);
-                draw_actor_count_chart(f, tab, chunks[0]);
                 if let Some(members) = &tab.cluster_status {
-                    draw_cluster_status(f, members, chunks[1])
+                    let chunks = Layout::default()
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                        .direction(Direction::Horizontal)
+                        .split(chunks[1]);
+                    draw_actor_count_chart(f, tab, chunks[0]);
+                    draw_cluster_status(f, members, chunks[1]);
+                } else {
+                    draw_actor_count_chart(f, tab, chunks[1]);
                 }
             }
             draw_actor_tree(f, tab, chunks[0]);
@@ -578,16 +580,12 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
 fn draw_cluster_status<B>(f: &mut Frame<B>, v: &Vec<ClusterMember>, area: Rect)
     where B: Backend,
 {
-
-    let items = v.iter().map(|i| Text::raw(&i.node_uid));
-
+    let items = v.iter().map(|i| Text::raw(format!("{}", i)));
     let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title("Cluster status"))
-        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
-        .highlight_symbol(">");
+            .title("Cluster nodes"));
 
     f.render_widget(list, area);
 }

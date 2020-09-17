@@ -212,7 +212,7 @@ impl AkkaTab {
     pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
     pub const MAX_DEAD_LETTERS_WINDOW_MEASURES: usize = 100;
 
-    pub fn new() -> AkkaTab {
+    pub fn new(is_cluster_enabled: bool) -> AkkaTab {
         AkkaTab {
             actors: StatefulList::with_items(vec![]),
             actor_counts: VecDeque::new(),
@@ -236,7 +236,7 @@ impl AkkaTab {
                 uptime: 0,
                 start_time: 0,
             },
-            cluster_status: None,
+            cluster_status: if is_cluster_enabled { Some(vec![]) } else { None },
         }
     }
 
@@ -377,7 +377,7 @@ impl<'a> App<'a> {
             tabs: TabsState::new(tabs),
             zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
             slick: jmx.map(|_| SlickTab::new()),
-            akka: akka.map(|_| AkkaTab::new()),
+            akka: akka.map(|akka| AkkaTab::new(akka.cluster_status_address.is_some())),
         }
     }
 
