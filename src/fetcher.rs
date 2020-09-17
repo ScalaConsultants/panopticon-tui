@@ -1,7 +1,7 @@
 use jmx::MBeanClient;
 
 use crate::akka;
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, ActorSystemStatus};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, ActorSystemStatus, ClusterMember};
 use crate::jmx::client::JMXClient;
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::zio::model::Fiber;
@@ -16,6 +16,7 @@ pub enum FetcherRequest {
     ActorTree,
     ActorSystemStatus,
     DeadLetters,
+    ClusterStatus,
 }
 
 pub enum FetcherResponse {
@@ -27,6 +28,7 @@ pub enum FetcherResponse {
     ActorTree(Result<Vec<ActorTreeNode>, String>),
     ActorSystemStatus(Result<ActorSystemStatus, String>),
     DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
+    ClusterStatus(Result<Vec<ClusterMember>, String>),
     FatalFailure(String),
 }
 
@@ -100,6 +102,11 @@ impl Fetcher {
         let s = self.akka_settings.as_ref().unwrap();
         akka::client::get_actor_system_status(&s.status_address, s.status_timeout)
             .map_err(|e| format!("Error loading akka actor system status: {}", e))
+    }
+
+    pub fn get_akka_cluster_status(&self) -> Result<Vec<ClusterMember>, String> {
+        let s = self.akka_settings.as_ref().unwrap();
+        akka::client::get_akka_cluster_status(s.cluster_status_address.as_ref().unwrap())
     }
 
     pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {

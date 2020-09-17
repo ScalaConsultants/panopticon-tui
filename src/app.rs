@@ -3,7 +3,7 @@ use std::iter::Iterator;
 
 use tui::widgets::ListState;
 
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus, ClusterMember};
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
@@ -201,6 +201,7 @@ pub struct AkkaTab {
     pub actors: StatefulList<String>,
     pub actor_counts: VecDeque<u64>,
     pub system_status: ActorSystemStatus,
+    pub cluster_status: Option<Vec<ClusterMember>>,
     pub dead_letters_messages: DeadLettersSnapshot,
     pub dead_letters_windows: VecDeque<DeadLettersWindow>,
     pub dead_letters_tabs: TabsState<DeadLettersTabKind>,
@@ -235,6 +236,7 @@ impl AkkaTab {
                 uptime: 0,
                 start_time: 0,
             },
+            cluster_status: None,
         }
     }
 
@@ -283,6 +285,10 @@ impl AkkaTab {
         };
 
         self.dead_letters_log = StatefulList::with_items(ui_messages)
+    }
+
+    pub fn update_cluster_status(&mut self, v: Vec<ClusterMember>) {
+        self.cluster_status = Some(v)
     }
 }
 

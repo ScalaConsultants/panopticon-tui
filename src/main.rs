@@ -80,6 +80,9 @@ struct Cli {
     /// Time window for akka dead-letters metrics
     #[structopt(long = "dead-letters-window", default_value = "5000")]
     dead_letters_window: u64,
+    /// Address of http endpoint to get akka cluster status
+    #[structopt(long = "akka-cluster-status")]
+    akka_cluster_status: Option<String>,
 }
 
 impl Cli {
@@ -96,14 +99,15 @@ impl Cli {
     }
 
     fn akka_settings(&self) -> Option<AkkaSettings> {
-        match (&self.actor_tree, &self.actor_system_status, &self.dead_letters) {
-            (Some(tree_addr), Some(status_addr), Some(dead_letters)) => Some(AkkaSettings {
+        match (&self.actor_tree, &self.actor_system_status, &self.dead_letters, &self.akka_cluster_status) {
+            (Some(tree_addr), Some(status_addr), Some(dead_letters), cluster_status) => Some(AkkaSettings {
                 tree_address: tree_addr.to_owned(),
                 tree_timeout: self.actor_tree_timeout,
                 status_address: status_addr.to_owned(),
                 status_timeout: (self.tick_rate as f64 * 0.8) as u64,
                 dead_letters_address: dead_letters.to_owned(),
                 dead_letters_window: self.dead_letters_window,
+                cluster_status_address: cluster_status.to_owned(),
             }),
             _ => None
         }
@@ -125,6 +129,7 @@ fn main() -> Result<(), failure::Error> {
 
     let tick_rate = Duration::from_millis(cli.tick_rate);
     let has_jmx = cli.jmx_settings().is_some();
+    let is_cluster_enabled: bool = cli.akka_settings().map(|s| s.cluster_status_address.is_some()).unwrap_or(false);
 
     enable_raw_mode()?;
 
@@ -184,6 +189,8 @@ fn main() -> Result<(), failure::Error> {
                                 respond(FetcherResponse::ActorSystemStatus(fetcher.get_actor_system_status())),
                             FetcherRequest::DeadLetters =>
                                 respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
+                            FetcherRequest::ClusterStatus =>
+                                respond(FetcherResponse::ClusterStatus(fetcher.get_akka_cluster_status())),
                         }
                     }
             }
@@ -295,6 +302,11 @@ fn main() -> Result<(), failure::Error> {
                         Err(e) => app.quit(Some(e)),
                         Ok(x) => app.akka.as_mut().unwrap().append_dead_letters(x.0, x.1)
                     },
+                FetcherResponse::ClusterStatus(d) =>
+                    match d {
+                        Err(e) => app.quit(Some(e)),
+                        Ok(x) => app.akka.as_mut().unwrap().update_cluster_status(x)
+                    }
             }
 
             Event::Tick => {
@@ -315,6 +327,14 @@ fn main() -> Result<(), failure::Error> {
                 if app.akka.is_some() {
                     txf.send(FetcherRequest::ActorSystemStatus)?;
                     txf.send(FetcherRequest::DeadLetters)?;
+                    if is_cluster_enabled {
+                        txf.send(FetcherRequest::ClusterStatus)?;
+                    }
+                    // match cli.akka_settings() {
+                    //     Some(AkkaSettings { cluster_status_address: Some(_), .. }) =>
+                    //         txf.send(FetcherRequest::ClusterStatus)?,
+                    //     _ => (),
+                    // }
                 }
             }
         }

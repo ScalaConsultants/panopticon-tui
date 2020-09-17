@@ -8,6 +8,7 @@ pub struct AkkaSettings {
     pub tree_address: String,
     pub status_address: String,
     pub dead_letters_address: String,
+    pub cluster_status_address: Option<String>,
     pub tree_timeout: u64,
     pub status_timeout: u64,
     pub dead_letters_window: u64,
@@ -95,6 +96,15 @@ pub struct ActorSystemStatus {
     pub uptime: u64,
     #[serde(rename(deserialize = "startTime"))]
     pub start_time: u64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ClusterMember {
+    pub node: String,
+    #[serde(rename(deserialize = "nodeUid"))]
+    pub node_uid: String,
+    pub status: String,
+    pub roles: Vec<String>
 }
 
 

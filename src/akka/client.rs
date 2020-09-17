@@ -15,6 +15,10 @@ pub fn get_deadletters(url: &String, window: u64) -> Result<(DeadLettersSnapshot
     get_deadletters_async(url, window)
 }
 
+pub fn get_akka_cluster_status(url: &String) -> Result<Vec<ClusterMember>, String> {
+    get_akka_cluster_status_async(url)
+}
+
 #[tokio::main]
 async fn get_deadletters_async(url: &String, window: u64) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {
     let url = format!("{}?window={}", url, window);
@@ -76,5 +80,21 @@ async fn get_actor_system_status_async(url: &String, timeout: u64) -> Result<Act
         Ok(body)
     } else {
         return Err(format!("Request to get actor count failed with status {}", response.status()))
+    }
+}
+
+#[tokio::main]
+async fn get_akka_cluster_status_async(url: &String) -> Result<Vec<ClusterMember>, String> {
+    let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    if response.status().is_success() {
+        let response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
+        if let Some(w) = response_body.get("members") {
+            let u: Vec<ClusterMember> = serde_json::from_value(w.to_owned()).unwrap();
+            Ok(u)
+        } else {
+            Err(format!("Request to get cluster status failed while deserializing"))
+        }
+    } else {
+        Err(format!("Request to get cluster status failed with status {}", response.status()))
     }
 }

@@ -10,7 +10,7 @@ use tui::{
     widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs, Text},
 };
 
-use crate::akka::model::DeadLettersWindow;
+use crate::akka::model::{DeadLettersWindow, ClusterMember};
 use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab};
 use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
@@ -376,8 +376,17 @@ fn draw_akka_tab<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .direction(Direction::Horizontal)
                 .split(chunks[0]);
+            {
+                let chunks = Layout::default()
+                    .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                    .direction(Direction::Vertical)
+                    .split(chunks[1]);
+                draw_actor_count_chart(f, tab, chunks[0]);
+                if let Some(members) = &tab.cluster_status {
+                    draw_cluster_status(f, members, chunks[1])
+                }
+            }
             draw_actor_tree(f, tab, chunks[0]);
-            draw_actor_count_chart(f, tab, chunks[1]);
         }
         {
             let chunks = Layout::default()
@@ -564,4 +573,21 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
         )
         .style(Style::default().fg(Color::Green));
     f.render_widget(count_bc, area);
+}
+
+fn draw_cluster_status<B>(f: &mut Frame<B>, v: &Vec<ClusterMember>, area: Rect)
+    where B: Backend,
+{
+
+    let items = v.iter().map(|i| Text::raw(&i.node_uid));
+
+    let list = List::new(items)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title_style(Style::default().fg(Color::Cyan))
+            .title("Cluster status"))
+        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+        .highlight_symbol(">");
+
+    f.render_widget(list, area);
 }
