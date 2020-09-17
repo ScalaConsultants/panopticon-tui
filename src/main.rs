@@ -129,7 +129,6 @@ fn main() -> Result<(), failure::Error> {
 
     let tick_rate = Duration::from_millis(cli.tick_rate);
     let has_jmx = cli.jmx_settings().is_some();
-    let is_cluster_enabled: bool = cli.akka_settings().map(|s| s.cluster_status_address.is_some()).unwrap_or(false);
 
     enable_raw_mode()?;
 
@@ -324,17 +323,12 @@ fn main() -> Result<(), failure::Error> {
                     None => {}
                 }
 
-                if app.akka.is_some() {
+                if let Some(akka) = app.akka.as_ref() {
                     txf.send(FetcherRequest::ActorSystemStatus)?;
                     txf.send(FetcherRequest::DeadLetters)?;
-                    if is_cluster_enabled {
+                    if akka.cluster_status.is_some() {
                         txf.send(FetcherRequest::ClusterStatus)?;
                     }
-                    // match cli.akka_settings() {
-                    //     Some(AkkaSettings { cluster_status_address: Some(_), .. }) =>
-                    //         txf.send(FetcherRequest::ClusterStatus)?,
-                    //     _ => (),
-                    // }
                 }
             }
         }

@@ -586,6 +586,5 @@ fn draw_cluster_status<B>(f: &mut Frame<B>, v: &Vec<ClusterMember>, area: Rect)
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
             .title("Cluster nodes"));
-
     f.render_widget(list, area);
 }
