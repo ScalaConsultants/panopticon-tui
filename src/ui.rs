@@ -1,4 +1,5 @@
 use std::io;
+use std::fmt;
 
 use tui::{
     backend::Backend,
@@ -10,10 +11,11 @@ use tui::{
     widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs, Text},
 };
 
-use crate::akka::model::{DeadLettersWindow, ClusterMember};
-use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab};
+use crate::akka::model::DeadLettersWindow;
+use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab, AkkaClusterTab};
 use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
+use crate::akka_cluster::model::ClusterStatus;
 use chrono::prelude::*;
 use humantime::format_duration;
 
@@ -38,6 +40,7 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
             AppTabKind::ZMX => &app.zmx.as_mut().map(|mut t| draw_zio_tab(&mut f, &mut t, chunks[1])),
             AppTabKind::Slick => &app.slick.as_ref().map(|t| draw_slick_tab(&mut f, t, chunks[1])),
             AppTabKind::Akka => &app.akka.as_mut().map(|t| draw_akka_tab(&mut f, t, chunks[1])),
+            AppTabKind::AkkaCluster => &app.akka_cluster.as_mut().map(|t| draw_akka_cluster_tab(&mut f, t, chunks[1]))
         };
     })
 }
@@ -376,19 +379,8 @@ fn draw_akka_tab<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .direction(Direction::Horizontal)
                 .split(chunks[0]);
-            {
-                if let Some(members) = &tab.cluster_status {
-                    let chunks = Layout::default()
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-                        .direction(Direction::Horizontal)
-                        .split(chunks[1]);
-                    draw_actor_count_chart(f, tab, chunks[0]);
-                    draw_cluster_status(f, members, chunks[1]);
-                } else {
-                    draw_actor_count_chart(f, tab, chunks[1]);
-                }
-            }
             draw_actor_tree(f, tab, chunks[0]);
+            draw_actor_count_chart(f, tab, chunks[1]);
         }
         {
             let chunks = Layout::default()
@@ -577,14 +569,53 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
     f.render_widget(count_bc, area);
 }
 
-fn draw_cluster_status<B>(f: &mut Frame<B>, v: &Vec<ClusterMember>, area: Rect)
+fn draw_akka_cluster_tab<B>(f: &mut Frame<B>, tab: &mut AkkaClusterTab, area: Rect)
     where B: Backend,
 {
-    let items = v.iter().map(|i| Text::raw(format!("{}", i)));
+
+    let chunks = Layout::default()
+        .constraints([Constraint::Min(7), Constraint::Length(3)].as_ref())
+        .split(area);
+    {
+        let chunks = Layout::default()
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .direction(Direction::Horizontal)
+            .split(chunks[0]);
+        {
+            let chunks = Layout::default()
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .direction(Direction::Vertical)
+                .split(chunks[0]);
+            draw_self_info(f, &tab.cluster_status, chunks[0]);
+            draw_cluster_members(f, &tab.cluster_status.unreachable, "Unreachable nodes", chunks[1])
+        }
+        draw_cluster_members(f, &tab.cluster_status.members, "Cluster members", chunks[1]);
+    }
+    draw_text(f, chunks[1]);
+}
+
+fn draw_self_info<B>(f: &mut Frame<B>, cs: &ClusterStatus, area: Rect)
+    where B: Backend,
+{
+    let items = vec!["SelfNode: ".to_owned() + &cs.self_node, "Leader:   ".to_owned() + &cs.leader, "Oldest:   ".to_owned() + &cs.oldest]
+        .into_iter().map(|i| Text::raw(i));
     let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
             .title_style(Style::default().fg(Color::Cyan))
-            .title("Cluster nodes"));
+            .title("General info"));
+    f.render_widget(list, area);
+}
+
+fn draw_cluster_members<B, C>(f: &mut Frame<B>, v: &Vec<C>, title: &str, area: Rect)
+    where B: Backend, C: fmt::Display
+{
+    let items: Vec<Text> = v.into_iter().map(|i| Text::raw(format!("{}\n\n", i))).collect();
+    let list = Paragraph::new(items.iter())
+        .block(Block::default()
+            .title(title)
+            .title_style(Style::default().fg(Color::Cyan))
+            .borders(Borders::ALL));
+
     f.render_widget(list, area);
 }

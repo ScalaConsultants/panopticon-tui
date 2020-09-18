@@ -1,11 +1,13 @@
 use jmx::MBeanClient;
 
 use crate::akka;
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, ActorSystemStatus, ClusterMember};
+use crate::akka_cluster;
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, ActorSystemStatus};
 use crate::jmx::client::JMXClient;
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::zio::model::Fiber;
 use crate::zio::zmx::{NetworkZMXClient, ZMXClient};
+use crate::akka_cluster::model::{ClusterStatus, AkkaClusterSettings};
 
 pub enum FetcherRequest {
     FiberDump,
@@ -28,7 +30,7 @@ pub enum FetcherResponse {
     ActorTree(Result<Vec<ActorTreeNode>, String>),
     ActorSystemStatus(Result<ActorSystemStatus, String>),
     DeadLetters(Result<(DeadLettersSnapshot, DeadLettersWindow), String>),
-    ClusterStatus(Result<Vec<ClusterMember>, String>),
+    ClusterStatus(Result<ClusterStatus, String>),
     FatalFailure(String),
 }
 
@@ -36,13 +38,15 @@ pub struct Fetcher {
     pub zmx_client: Option<Box<dyn ZMXClient>>,
     pub jmx: Option<JMXClient>,
     pub akka_settings: Option<AkkaSettings>,
+    pub akka_cluster_settings: Option<AkkaClusterSettings>,
 }
 
 impl Fetcher {
     pub fn new(
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
-        akka: Option<AkkaSettings>) -> Result<Fetcher, String> {
+        akka: Option<AkkaSettings>,
+        akka_cluster: Option<AkkaClusterSettings>) -> Result<Fetcher, String> {
         let jmx_client: Option<JMXClient> = match jmx {
             None => Ok(None),
             Some(conn) => {
@@ -66,6 +70,7 @@ impl Fetcher {
             }),
             jmx: jmx_client,
             akka_settings: akka,
+            akka_cluster_settings: akka_cluster,
         })
     }
 
@@ -104,9 +109,9 @@ impl Fetcher {
             .map_err(|e| format!("Error loading akka actor system status: {}", e))
     }
 
-    pub fn get_akka_cluster_status(&self) -> Result<Vec<ClusterMember>, String> {
-        let s = self.akka_settings.as_ref().unwrap();
-        akka::client::get_akka_cluster_status(s.cluster_status_address.as_ref().unwrap())
+    pub fn get_akka_cluster_status(&self) -> Result<ClusterStatus, String> {
+        let s = self.akka_cluster_settings.as_ref().unwrap();
+        akka_cluster::client::get_akka_cluster_status(&s.cluster_status_address)
     }
 
     pub fn get_dead_letters(&self) -> Result<(DeadLettersSnapshot, DeadLettersWindow), String> {

@@ -3,10 +3,11 @@ use std::iter::Iterator;
 
 use tui::widgets::ListState;
 
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus, ClusterMember};
+use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus};
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
+use crate::akka_cluster::model::{AkkaClusterSettings, ClusterStatus};
 
 pub struct UIFiber {
     pub label: String,
@@ -18,6 +19,7 @@ pub enum AppTabKind {
     ZMX,
     Slick,
     Akka,
+    AkkaCluster,
 }
 
 #[derive(Clone)]
@@ -201,7 +203,6 @@ pub struct AkkaTab {
     pub actors: StatefulList<String>,
     pub actor_counts: VecDeque<u64>,
     pub system_status: ActorSystemStatus,
-    pub cluster_status: Option<Vec<ClusterMember>>,
     pub dead_letters_messages: DeadLettersSnapshot,
     pub dead_letters_windows: VecDeque<DeadLettersWindow>,
     pub dead_letters_tabs: TabsState<DeadLettersTabKind>,
@@ -212,7 +213,7 @@ impl AkkaTab {
     pub const MAX_ACTOR_COUNT_MEASURES: usize = 25;
     pub const MAX_DEAD_LETTERS_WINDOW_MEASURES: usize = 100;
 
-    pub fn new(is_cluster_enabled: bool) -> AkkaTab {
+    pub fn new() -> AkkaTab {
         AkkaTab {
             actors: StatefulList::with_items(vec![]),
             actor_counts: VecDeque::new(),
@@ -236,7 +237,6 @@ impl AkkaTab {
                 uptime: 0,
                 start_time: 0,
             },
-            cluster_status: if is_cluster_enabled { Some(vec![]) } else { None },
         }
     }
 
@@ -286,9 +286,27 @@ impl AkkaTab {
 
         self.dead_letters_log = StatefulList::with_items(ui_messages)
     }
+}
 
-    pub fn update_cluster_status(&mut self, v: Vec<ClusterMember>) {
-        self.cluster_status = Some(v)
+pub struct AkkaClusterTab {
+    pub cluster_status: ClusterStatus,
+}
+
+impl AkkaClusterTab {
+    pub fn new() -> AkkaClusterTab {
+        AkkaClusterTab {
+            cluster_status: ClusterStatus {
+                self_node: "none".to_owned(),
+                members: vec![],
+                unreachable: vec![],
+                leader: "none".to_owned(),
+                oldest: "none".to_owned(),
+            }
+        }
+    }
+
+    pub fn update_cluster_status(&mut self, cs: ClusterStatus) {
+        self.cluster_status = cs
     }
 }
 
@@ -348,6 +366,7 @@ pub struct App<'a> {
     pub zmx: Option<ZMXTab>,
     pub slick: Option<SlickTab>,
     pub akka: Option<AkkaTab>,
+    pub akka_cluster: Option<AkkaClusterTab>,
 }
 
 impl<'a> App<'a> {
@@ -355,7 +374,8 @@ impl<'a> App<'a> {
         title: &'a str,
         zio_zmx_addr: Option<String>,
         jmx: Option<JMXConnectionSettings>,
-        akka: Option<AkkaSettings>) -> App<'a> {
+        akka: Option<AkkaSettings>,
+        akka_cluster: Option<AkkaClusterSettings>) -> App<'a> {
         let mut tabs: Vec<Tab<AppTabKind>> = vec![];
 
         if let Some(_) = zio_zmx_addr {
@@ -370,6 +390,10 @@ impl<'a> App<'a> {
             tabs.push(Tab { kind: AppTabKind::Akka, title: "Akka".to_owned() })
         }
 
+        if let Some(_) = akka_cluster {
+            tabs.push(Tab { kind: AppTabKind::AkkaCluster, title: "Cluster".to_owned() })
+        }
+
         App {
             title,
             should_quit: false,
@@ -377,7 +401,8 @@ impl<'a> App<'a> {
             tabs: TabsState::new(tabs),
             zmx: zio_zmx_addr.map(|_| ZMXTab::new()),
             slick: jmx.map(|_| SlickTab::new()),
-            akka: akka.map(|akka| AkkaTab::new(akka.cluster_status_address.is_some())),
+            akka: akka.map(|_| AkkaTab::new()),
+            akka_cluster: akka_cluster.map(|_| AkkaClusterTab::new()),
         }
     }
 
@@ -385,7 +410,8 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             AppTabKind::ZMX => self.zmx.as_mut().unwrap().select_prev_fiber(),
             AppTabKind::Slick => {}
-            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.previous()
+            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.previous(),
+            AppTabKind::AkkaCluster => {}
         }
     }
 
@@ -393,7 +419,8 @@ impl<'a> App<'a> {
         match self.tabs.current().kind {
             AppTabKind::ZMX => self.zmx.as_mut().unwrap().select_next_fiber(),
             AppTabKind::Slick => {}
-            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.next()
+            AppTabKind::Akka => self.akka.as_mut().unwrap().dead_letters_log.next(),
+            AppTabKind::AkkaCluster => {}
         }
     }
 
@@ -413,7 +440,8 @@ impl<'a> App<'a> {
                 let akka = self.akka.as_mut().unwrap();
                 akka.dead_letters_tabs.next();
                 akka.reload_dead_letters_log();
-            }
+            },
+            AppTabKind::AkkaCluster => {}
         }
     }
 
@@ -425,7 +453,8 @@ impl<'a> App<'a> {
                 let akka = self.akka.as_mut().unwrap();
                 akka.dead_letters_tabs.previous();
                 akka.reload_dead_letters_log();
-            }
+            },
+            AppTabKind::AkkaCluster => {}
         }
     }
 
@@ -448,6 +477,7 @@ impl<'a> App<'a> {
             AppTabKind::ZMX => self.zmx.as_mut().unwrap().scroll_up(),
             AppTabKind::Slick => {}
             AppTabKind::Akka => self.akka.as_mut().unwrap().select_prev_actor(),
+            AppTabKind::AkkaCluster => {}
         }
     }
 
@@ -456,6 +486,7 @@ impl<'a> App<'a> {
             AppTabKind::ZMX => self.zmx.as_mut().unwrap().scroll_down(),
             AppTabKind::Slick => {}
             AppTabKind::Akka => self.akka.as_mut().unwrap().select_next_actor(),
+            AppTabKind::AkkaCluster => {}
         }
     }
 }
