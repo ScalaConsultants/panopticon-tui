@@ -15,7 +15,7 @@ edition = "2018"
 crossterm = "0.17"
 tui = { version = "0.9.4", default-features = false, features = ['crossterm'] }
 failure = "0.1"
-bytes = "0.4"
+bytes = "0.5"
 redis-protocol = "1.0.0"
 futures = "0.3.4"
 tokio = { version = "0.2", features = ["full"] }
