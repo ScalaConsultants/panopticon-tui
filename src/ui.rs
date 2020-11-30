@@ -1,5 +1,7 @@
 use std::io;
 
+use chrono::prelude::*;
+use humantime::format_duration;
 use tui::{
     backend::Backend,
     Frame,
@@ -7,15 +9,15 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols::Marker,
     Terminal,
-    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs, Text},
+    widgets::{Axis, BarChart, Block, Borders, Chart, Dataset, List, Paragraph, Tabs},
 };
+use tui::text::Span;
+use tui::widgets::{ListItem, Wrap};
 
 use crate::akka::model::DeadLettersWindow;
 use crate::app::{AkkaTab, App, AppTabKind, SlickTab, ZMXTab};
 use crate::jmx::model::HikariMetrics;
 use crate::zio::model::FiberCount;
-use chrono::prelude::*;
-use humantime::format_duration;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), io::Error> {
     terminal.draw(|mut f| {
@@ -24,12 +26,10 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
             .split(f.size());
         let tabs = app.tabs.to_owned();
         let titles = tabs.titles();
-        let tabs_widget = Tabs::default()
+        let tabs_widget = Tabs::new(titles)
             .block(Block::default()
                 .borders(Borders::ALL)
-                .title_style(Style::default().fg(Color::Blue).modifier(Modifier::BOLD))
-                .title(app.title))
-            .titles(&titles)
+                .title(Span::styled(app.title, Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))))
             .style(Style::default().fg(Color::Green))
             .highlight_style(Style::default().fg(Color::Yellow))
             .select(tabs.index);
@@ -45,15 +45,13 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
 fn draw_text<B>(f: &mut Frame<B>, area: Rect)
     where B: Backend,
 {
-    let text = [];
-    let p = Paragraph::new(text.iter())
+    let p = Paragraph::new("")
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("by Scalac")
-                .title_style(Style::default().fg(Color::Magenta).modifier(Modifier::BOLD)),
+                .title(Span::styled("by Scalac", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)))
         )
-        .wrap(true);
+        .wrap(Wrap { trim: true });
     f.render_widget(p, area);
 }
 
@@ -104,8 +102,7 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     let active_threads_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
-            .title_style(Style::default().fg(Color::Cyan))
-            .title(&active_threads_title))
+            .title(Span::styled(&active_threads_title, Style::default().fg(Color::Cyan))))
         .data(&slick_threads_barchart)
         .max(db.slick_config.max_threads as u64)
         .bar_width(3)
@@ -126,8 +123,7 @@ fn draw_slick_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     let slick_queue_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
-            .title_style(Style::default().fg(Color::Cyan))
-            .title(&queue_size_title))
+            .title(Span::styled(&queue_size_title, Style::default().fg(Color::Cyan))))
         .data(&slick_queue_data)
         .max(db.slick_config.max_queue_size as u64)
         .bar_width(3)
@@ -156,7 +152,7 @@ fn draw_hikari_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
     let idle_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.idle);
     let waiting_chart: Vec<(f64, f64)> = hikari_chart(db, |x| x.waiting);
 
-    let datasets = [
+    let datasets = vec![
         Dataset::default()
             .name("total")
             .marker(Marker::Braille)
@@ -192,29 +188,28 @@ fn draw_hikari_graphs<B>(f: &mut Frame<B>, db: &SlickTab, area: Rect)
         idle_connections,
         waiting_connections
     );
-    let label = &["0".to_owned(), ((max_connections as f64) / 2.0).to_string(), max_connections.to_string()];
-    let c = Chart::default()
+    let label = vec!["0".to_owned(), ((max_connections as f64) / 2.0).to_string(), max_connections.to_string()];
+    let c = Chart::new(datasets)
         .block(
             Block::default()
-                .title(&title)
-                .title_style(Style::default().fg(Color::Cyan))
+                .title(Span::styled(&title, Style::default().fg(Color::Cyan)))
                 .borders(Borders::ALL)
         )
         .x_axis(
             Axis::default()
                 .style(Style::default().fg(Color::Gray))
-                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .labels(vec![
+                    Span::styled("older", Style::default().add_modifier(Modifier::ITALIC)),
+                    Span::styled("recent", Style::default().add_modifier(Modifier::ITALIC))
+                ])
                 .bounds([0.0, SlickTab::MAX_HIKARI_MEASURES as f64])
-                .labels(&["older", "recent"])
         )
         .y_axis(
             Axis::default()
                 .style(Style::default().fg(Color::Gray))
-                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .labels(label.into_iter().map(|l| Span::styled(l, Style::default().add_modifier(Modifier::ITALIC))).collect())
                 .bounds([-1.0, (max_connections + 1) as f64])
-                .labels(label)
-        )
-        .datasets(&datasets);
+        );
     f.render_widget(c, area);
 }
 
@@ -265,14 +260,13 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
                     .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                     .split(chunks[0]);
 
-                let items = zmx.fibers.items.iter().map(|i| Text::raw(i));
+                let items: Vec<ListItem<'_>> = zmx.fibers.items.iter().map(|i| ListItem::new(i.to_owned())).collect();
 
                 let list = List::new(items)
                     .block(Block::default()
                         .borders(Borders::ALL)
-                        .title_style(Style::default().fg(Color::Cyan))
-                        .title("Fibers (press <Enter> to take a snapshot)"))
-                    .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+                        .title(Span::styled("Fibers (press <Enter> to take a snapshot)", Style::default().fg(Color::Cyan))))
+                    .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                     .highlight_symbol(">");
                 f.render_stateful_widget(list, chunks[0], &mut zmx.fibers.state);
 
@@ -281,7 +275,7 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
                 let finishing_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.finishing);
                 let suspended_chart: Vec<(f64, f64)> = fiber_count_chart(zmx, |x| x.suspended);
 
-                let datasets = [
+                let datasets = vec![
                     Dataset::default()
                         .name("running")
                         .marker(Marker::Braille)
@@ -319,43 +313,39 @@ fn draw_fiber_list<B>(f: &mut Frame<B>, zmx: &mut ZMXTab, area: Rect)
                     finishing_fibers,
                     suspended_fibers
                 );
-                let label = &["0".to_owned(), ((max_fibers as f64) / 2.0).to_string(), max_fibers.to_string()];
-                let c = Chart::default()
+                let label = vec!["0".to_owned(), ((max_fibers as f64) / 2.0).to_string(), max_fibers.to_string()];
+                let c = Chart::new(datasets)
                     .block(
                         Block::default()
-                            .title(&title)
-                            .title_style(Style::default().fg(Color::Cyan))
+                            .title(Span::styled(&title, Style::default().fg(Color::Cyan)))
                             .borders(Borders::ALL)
                     )
                     .x_axis(
                         Axis::default()
                             .style(Style::default().fg(Color::Gray))
-                            .labels_style(Style::default().modifier(Modifier::ITALIC))
+                            .labels(vec![
+                                Span::styled("older", Style::default().add_modifier(Modifier::ITALIC)),
+                                Span::styled("recent", Style::default().add_modifier(Modifier::ITALIC))
+                            ])
                             .bounds([0.0, ZMXTab::MAX_FIBER_COUNT_MEASURES as f64])
-                            .labels(&["older", "recent"])
                     )
                     .y_axis(
                         Axis::default()
                             .style(Style::default().fg(Color::Gray))
-                            .labels_style(Style::default().modifier(Modifier::ITALIC))
+                            .labels(label.into_iter().map(|l| Span::styled(l, Style::default().add_modifier(Modifier::ITALIC))).collect())
                             .bounds([-1.0, (max_fibers + 1) as f64])
-                            .labels(label)
-                    )
-                    .datasets(&datasets);
+                    );
                 f.render_widget(c, chunks[1]);
             }
 
-            let text = [Text::raw(zmx.selected_fiber_dump.0.to_owned())];
-
-            let p = Paragraph::new(text.iter())
+            let p = Paragraph::new(zmx.selected_fiber_dump.0.to_owned())
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Fiber dump (press <PageUp>/<PageDown> to scroll)")
-                        .title_style(Style::default().fg(Color::Cyan)),
+                        .title(Span::styled("Fiber dump (press <PageUp>/<PageDown> to scroll)", Style::default().fg(Color::Cyan)))
                 )
-                .wrap(true)
-                .scroll(zmx.scroll);
+                .wrap(Wrap { trim: true })
+                .scroll((zmx.scroll, 0));
             f.render_widget(p, chunks[1]);
         }
     }
@@ -398,11 +388,10 @@ fn draw_dead_letters_logs<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
         .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(6)].as_ref())
         .split(area);
     let titles = tab.dead_letters_tabs.titles();
-    let tabs_widget = Tabs::default()
+    let tabs_widget = Tabs::new(titles)
         .block(Block::default()
             .borders(Borders::ALL)
             .title("Dead Letter logs (<A> left tab, <D> right tab)"))
-        .titles(&titles)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Blue))
         .select(tab.dead_letters_tabs.index);
@@ -413,15 +402,14 @@ fn draw_dead_letters_logs<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
 
 fn draw_dead_letter_log<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
     where B: Backend {
-    let items = tab.dead_letters_log.items.iter().map(|i| Text::raw(i.summary()));
+    let items: Vec<ListItem<'_>> = tab.dead_letters_log.items.iter().map(|i| ListItem::new(i.summary())).collect();
 
     let title = format!("{:?}, {} total (↑↓ select message)", tab.dead_letters_tabs.current().kind, tab.dead_letters_log.items.len());
     let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title_style(Style::default().fg(Color::Cyan))
-            .title(&title))
-        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+            .title(Span::styled(&title, Style::default().fg(Color::Cyan))))
+        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
         .highlight_symbol(">");
 
     f.render_stateful_widget(list, area, &mut tab.dead_letters_log.state);
@@ -430,28 +418,20 @@ fn draw_dead_letter_log<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
 fn draw_dead_letter_message_details<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
     where B: Backend {
     let text = match tab.dead_letters_log.selected() {
-        None => vec![Text::raw("Select a message to see details")],
+        None => "Select a message to see details".to_owned(),
         Some(m) => {
-            let mut items: Vec<Text> = vec![
-                Text::raw(format!("Data: {}\n", m.message)),
-                // todo: format with system locale
-                Text::raw(format!("Timestamp: {}\n", m.readable_timestamp().format("%d.%m.%Y %H:%M:%S"))),
-                Text::raw(format!("Sender: {}\n", m.sender)),
-                Text::raw(format!("Receiver: {}\n", m.recipient)),
-            ];
-            match &m.reason {
-                None => {}
-                Some(r) => {
-                    items.push(Text::raw(format!("Reason: {}\n", r)));
-                }
+            let reason = match &m.reason {
+                None => "".to_owned(),
+                Some(r) => format!("Reason: {}\n", r)
             };
-            items
+            // todo: format timestamp with system locale
+            format!("Data: {}\nTimestamp: {}\nSender: {}\nReceiver: {}\n{}", m.message, m.readable_timestamp().format("%d.%m.%Y %H:%M:%S"), m.sender, m.recipient, reason)
         }
     };
 
-    let p = Paragraph::new(text.iter())
+    let p = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL))
-        .wrap(true);
+        .wrap(Wrap { trim: true });
     f.render_widget(p, area);
 }
 
@@ -462,7 +442,7 @@ fn draw_dead_letters_window_chart<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: 
     let unhandled_chart: Vec<(f64, f64)> = dead_letters_window_chart(tab, |x| x.unhandled.count);
     let dropped_chart: Vec<(f64, f64)> = dead_letters_window_chart(tab, |x| x.dropped.count);
 
-    let datasets = [
+    let datasets = vec![
         Dataset::default()
             .name("dead_letters")
             .marker(Marker::Braille)
@@ -494,43 +474,41 @@ fn draw_dead_letters_window_chart<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: 
         unhandled,
         dropped
     );
-    let label = &["0".to_owned(), ((max as f64) / 2.0).to_string(), max.to_string()];
-    let c = Chart::default()
+    let label = vec!["0".to_owned(), ((max as f64) / 2.0).to_string(), max.to_string()];
+    let c = Chart::new(datasets)
         .block(
             Block::default()
-                .title(&title)
-                .title_style(Style::default().fg(Color::Cyan))
+                .title(Span::styled(&title, Style::default().fg(Color::Cyan)))
                 .borders(Borders::ALL)
         )
         .x_axis(
             Axis::default()
                 .style(Style::default().fg(Color::Gray))
-                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .labels(vec![
+                    Span::styled("older", Style::default().add_modifier(Modifier::ITALIC)),
+                    Span::styled("recent", Style::default().add_modifier(Modifier::ITALIC))
+                ])
                 .bounds([0.0, AkkaTab::MAX_DEAD_LETTERS_WINDOW_MEASURES as f64])
-                .labels(&["older", "recent"])
         )
         .y_axis(
             Axis::default()
                 .style(Style::default().fg(Color::Gray))
-                .labels_style(Style::default().modifier(Modifier::ITALIC))
+                .labels(label.into_iter().map(|l| Span::styled(l, Style::default().add_modifier(Modifier::ITALIC))).collect())
                 .bounds([-1.0, (max + 1) as f64])
-                .labels(label)
-        )
-        .datasets(&datasets);
+        );
     f.render_widget(c, area);
 }
 
 fn draw_actor_tree<B>(f: &mut Frame<B>, tab: &mut AkkaTab, area: Rect)
     where B: Backend,
 {
-    let items = tab.actors.items.iter().map(|i| Text::raw(i));
+    let items: Vec<ListItem<'_>> = tab.actors.items.iter().map(|i| ListItem::new(i.to_owned())).collect();
 
     let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title_style(Style::default().fg(Color::Cyan))
-            .title("Actors (<Enter> to reload, <PageUp>/<PageDown> to scroll)"))
-        .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
+            .title(Span::styled("Actors (<Enter> to reload, <PageUp>/<PageDown> to scroll)", Style::default().fg(Color::Cyan))))
+        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
         .highlight_symbol(">");
 
     f.render_stateful_widget(list, area, &mut tab.actors.state);
@@ -552,8 +530,7 @@ fn draw_actor_count_chart<B>(f: &mut Frame<B>, tab: &AkkaTab, area: Rect)
     let count_bc = BarChart::default()
         .block(Block::default()
             .borders(Borders::ALL)
-            .title_style(Style::default().fg(Color::Cyan))
-            .title(&title))
+            .title(Span::styled(&title, Style::default().fg(Color::Cyan))))
         .data(&data)
         .bar_width(3)
         .bar_gap(1)
