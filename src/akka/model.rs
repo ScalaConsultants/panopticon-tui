@@ -97,7 +97,6 @@ pub struct ActorSystemStatus {
     pub start_time: u64,
 }
 
-
 impl DeadLettersWindow {
     pub fn max(&self) -> u32 {
         vec![self.dead_letters.count, self.unhandled.count, self.dropped.count].iter().max().map(|x| x.to_owned()).unwrap_or(0)

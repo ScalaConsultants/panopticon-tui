@@ -2,6 +2,7 @@ mod ui;
 mod zio;
 mod jmx;
 mod akka;
+mod akka_cluster;
 mod app;
 mod fetcher;
 mod widgets;
@@ -30,6 +31,7 @@ use crate::fetcher::{Fetcher, FetcherRequest, FetcherResponse};
 
 use crate::akka::model::AkkaSettings;
 use crate::jmx::model::JMXConnectionSettings;
+use crate::akka_cluster::model::AkkaClusterSettings;
 
 enum Event<I> {
     Input(I),
@@ -80,6 +82,9 @@ struct Cli {
     /// Time window for akka dead-letters metrics
     #[structopt(long = "dead-letters-window", default_value = "5000")]
     dead_letters_window: u64,
+    /// Address of http endpoint to get akka cluster status
+    #[structopt(long = "akka-cluster-status")]
+    akka_cluster_status: Option<String>,
 }
 
 impl Cli {
@@ -108,6 +113,13 @@ impl Cli {
             _ => None
         }
     }
+
+    fn akka_cluster_settings(&self) -> Option<AkkaClusterSettings> {
+        match &self.akka_cluster_status {
+            Some(cluster_address) => Some(AkkaClusterSettings{ cluster_status_address: cluster_address.to_owned() }),
+            _ => None
+        }
+    }
 }
 
 fn main() -> Result<(), failure::Error> {
@@ -116,7 +128,7 @@ fn main() -> Result<(), failure::Error> {
     // disable jmx crate logging
     env::set_var("J4RS_CONSOLE_LOG_LEVEL", "disabled");
 
-    if cli.zio_zmx.is_none() && cli.jmx_settings().is_none() && cli.akka_settings().is_none() {
+    if cli.zio_zmx.is_none() && cli.jmx_settings().is_none() && cli.akka_settings().is_none() && cli.akka_cluster_settings().is_none() {
         let mut clap = Cli::clap();
         println!("Nothing to monitor. Please check the following help message.\n");
         clap.print_long_help().expect("Failed printing help message");
@@ -141,6 +153,7 @@ fn main() -> Result<(), failure::Error> {
         cli.zio_zmx.clone(),
         cli.jmx_settings(),
         cli.akka_settings(),
+        cli.akka_cluster_settings(),
     );
 
     terminal.clear()?;
@@ -157,7 +170,8 @@ fn main() -> Result<(), failure::Error> {
 
             match Fetcher::new(cli.zio_zmx.clone(),
                                cli.jmx_settings(),
-                               cli.akka_settings()) {
+                               cli.akka_settings(),
+                               cli.akka_cluster_settings()) {
                 Err(e) => {
                     eprintln!("Responding with failure {}", e);
                     loop {
@@ -184,6 +198,8 @@ fn main() -> Result<(), failure::Error> {
                                 respond(FetcherResponse::ActorSystemStatus(fetcher.get_actor_system_status())),
                             FetcherRequest::DeadLetters =>
                                 respond(FetcherResponse::DeadLetters(fetcher.get_dead_letters())),
+                            FetcherRequest::ClusterStatus =>
+                                respond(FetcherResponse::ClusterStatus(fetcher.get_akka_cluster_status())),
                         }
                     }
             }
@@ -240,6 +256,7 @@ fn main() -> Result<(), failure::Error> {
                         AppTabKind::ZMX => txf.send(FetcherRequest::FiberDump)?,
                         AppTabKind::Slick => {}
                         AppTabKind::Akka => txf.send(FetcherRequest::ActorTree)?,
+                        AppTabKind::AkkaCluster => {}
                     }
                 }
                 _ => {}
@@ -295,6 +312,11 @@ fn main() -> Result<(), failure::Error> {
                         Err(e) => app.quit(Some(e)),
                         Ok(x) => app.akka.as_mut().unwrap().append_dead_letters(x.0, x.1)
                     },
+                FetcherResponse::ClusterStatus(d) =>
+                    match d {
+                        Err(e) => app.quit(Some(e)),
+                        Ok(x) => app.akka_cluster.as_mut().unwrap().update_cluster_status(x)
+                    }
             }
 
             Event::Tick => {
@@ -315,6 +337,10 @@ fn main() -> Result<(), failure::Error> {
                 if app.akka.is_some() {
                     txf.send(FetcherRequest::ActorSystemStatus)?;
                     txf.send(FetcherRequest::DeadLetters)?;
+                }
+
+                if app.akka_cluster.is_some() {
+                    txf.send(FetcherRequest::ClusterStatus)?;
                 }
             }
         }
