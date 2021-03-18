@@ -1,9 +1,10 @@
 use std::collections::VecDeque;
 use std::iter::Iterator;
 
+use tui::text::{Span, Spans};
 use tui::widgets::ListState;
 
-use crate::akka::model::{ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersWindow, DeadLettersUIMessage, ActorSystemStatus};
+use crate::akka::model::{ActorSystemStatus, ActorTreeNode, AkkaSettings, DeadLettersSnapshot, DeadLettersUIMessage, DeadLettersWindow};
 use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, SlickMetrics};
 use crate::widgets::tree;
 use crate::zio::model::{Fiber, FiberCount, FiberStatus};
@@ -52,8 +53,8 @@ impl<K> TabsState<K> {
         &self.tabs[self.index]
     }
 
-    pub fn titles(&self) -> Vec<&String> {
-        self.tabs.iter().map(|x| &x.title).collect()
+    pub fn titles(&self) -> Vec<Spans> {
+        self.tabs.iter().map(|x| Spans(vec![Span::raw(&x.title)])).collect()
     }
 }
 
