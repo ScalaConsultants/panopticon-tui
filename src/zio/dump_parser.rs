@@ -10,7 +10,7 @@ use crate::zio::model::{Fiber, FiberStatus};
 ///   Status: Running()
 ///   ```
 pub fn parse_fiber_dump(dump: String) -> Option<Fiber> {
-    let fib_str: Vec<&str> = dump.lines().take(2).collect();
+    let fib_str: Vec<&str> = dump.trim().lines().take(2).collect();
 
     if fib_str.len() < 2 {
         return None;
