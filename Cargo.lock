@@ -1201,11 +1201,11 @@ dependencies = [
 
 [[package]]
 name = "redis-protocol"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b88cf5b5f27cd6697c7b28835c14ecf3a0c8086839730124f45a4513eb273d73"
+checksum = "21f53c9a26381567ff973c7fa45524da68e432f92e3be0e945f41d62c81f0af6"
 dependencies = [
- "bytes 0.4.12",
+ "bytes 1.0.1",
  "cookie-factory",
  "crc16",
  "log",
