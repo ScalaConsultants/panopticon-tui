@@ -48,7 +48,7 @@ impl Fetcher {
                     "service:jmx:rmi://{}/jndi/rmi://{}/jmxrmi",
                     &conn.address, &conn.address
                 );
-                let url = jmx::MBeanAddress::service_url(url_str.clone());
+                let url = jmx::MBeanAddress::service_url(&url_str);
                 MBeanClient::connect(url)
                     .map(|x| Some(JMXClient::new(x, conn.db_pool_name.clone())))
                     .map_err(|e| format!(
