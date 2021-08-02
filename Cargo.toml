@@ -13,7 +13,7 @@ edition = "2018"
 
 [dependencies]
 crossterm = "0.18"
-tui = { version = "0.14.0", default-features = false, features = ['crossterm'] }
+tui = { version = "0.16.0", default-features = false, features = ['crossterm'] }
 failure = "0.1"
 bytes = "0.4"
 redis-protocol = "1.0.0"
