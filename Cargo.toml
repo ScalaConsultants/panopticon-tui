@@ -12,7 +12,7 @@ categories = ["command-line-utilities"]
 edition = "2018"
 
 [dependencies]
-crossterm = "0.18"
+crossterm = "0.21"
 tui = { version = "0.14.0", default-features = false, features = ['crossterm'] }
 failure = "0.1"
 bytes = "0.4"
