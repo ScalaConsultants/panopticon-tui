@@ -10,10 +10,32 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+      options: -t
+    services:
+      scala-app:
+        image: vpavkin/panopticon-example:0.1.0
+        ports:
+          - 8080:8080
+          - 6789:6789/udp
+          - 6789:6789/tcp
+          - 9010:9010
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions-rs/cargo@v1
+    - name: Install rust toolchain
+      uses: actions-rs/toolchain@v1
       with:
-        command: test
-        args: --verbose
+        profile: minimal
+        toolchain: stable
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Build
+      run: cargo build
+    - name: LS
+      run: ls
+    - name: Run panopticon connection checks
+      run: ./target/debug/panopticon-tui --tick-rate=2000 --zio-zmx localhost:6789  --actor-tree http://localhost:8080/panopticon/actor-tree --actor-system-status http://localhost:8080/panopticon/actor-system-status --jmx localhost:9010 --db-pool-name myDb --dead-letters http://localhost:8080/panopticon/dead-letters --check
+      env:
+        RUST_BACKTRACE: full

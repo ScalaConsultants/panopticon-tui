@@ -7,6 +7,7 @@ use crate::jmx::model::{HikariMetrics, JMXConnectionSettings, SlickConfig, Slick
 use crate::zio::model::Fiber;
 use crate::zio::zmx::{NetworkZMXClient, ZMXClient};
 
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum FetcherRequest {
     FiberDump,
     RegularFiberDump,
