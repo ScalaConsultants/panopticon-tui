@@ -32,25 +32,25 @@ async fn get_actors_async(url: &String, timeout: u64) -> Result<Vec<ActorTreeNod
     let url = format!("{}?timeout={}", url, timeout);
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if response.status().is_success() {
-        let mut response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
-        Ok(build_actor_tree(&mut response_body))
+        let response_body: HashMap<String, Value> = response.json().await.map_err(|e| e.to_string())?;
+        Ok(build_actor_tree(response_body))
     } else {
         Err(format!("Request to get actor tree failed with status: {}", response.status()))
     }
 }
 
-fn build_actor_tree(json: &mut HashMap<String, Value>) -> Vec<ActorTreeNode> {
+fn build_actor_tree(json: HashMap<String, Value>) -> Vec<ActorTreeNode> {
     let mut actors: Vec<ActorTreeNode> = vec![];
     // user actors should go first
     if let Some(v) = json.get("user") {
-        actors.push(ActorTreeNode { name: "user".to_string(), parent: None, id: 1 });
-        build_actor_tree_iter(&v, Some(1), &mut actors)
+        actors.push(ActorTreeNode { name: "user".to_owned(), parent: None, id: 1 });
+        build_actor_tree_iter(v, Some(1), &mut actors)
     }
 
     for (k, v) in json {
         if k != "user" {
             let id = actors.len() + 1;
-            actors.push(ActorTreeNode { name: k.to_owned(), parent: None, id });
+            actors.push(ActorTreeNode { name: k, parent: None, id });
             build_actor_tree_iter(&v, Some(id), &mut actors)
         }
     }
@@ -75,6 +75,6 @@ async fn get_actor_system_status_async(url: &String, timeout: u64) -> Result<Act
         let body: ActorSystemStatus = response.json().await.map_err(|e| e.to_string())?;
         Ok(body)
     } else {
-        return Err(format!("Request to get actor count failed with status {}", response.status()))
+        Err(format!("Request to get actor count failed with status {}", response.status()))
     }
 }
